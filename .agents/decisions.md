@@ -385,3 +385,45 @@ A chronological record of architectural and technical decisions made during the 
 - **Choice:** Do not proceed to the next implementation slice until each review finding is fixed, explicitly rejected with rationale, or recorded in `roadmap.md`.
 - **Why:** This forces review outcomes into a complete, auditable state instead of allowing unresolved findings to accumulate between slices.
 - **Alternatives rejected:** Implicit review follow-up, Carrying unresolved findings informally into later work
+
+### DEC-055 — Runtime trust-path binding is request-first and Agent Card-aware
+- **Date:** 2026-03-29
+- **Status:** accepted
+- **Choice:** Make `PredictionClient` always bind responses and stream events to the active request, and bind provider identity to an Agent Card only when the caller supplies validated Agent Card metadata for that runtime path.
+- **Why:** Request binding is mandatory for safe default consumption, while provider-identity binding should be enforced wherever the consumer actually has discovered provider metadata without making bare transport fixtures or bootstrap callers invent Agent Cards.
+- **Alternatives rejected:** Trusting schema-valid responses alone, Forcing provider identity checks even when no Agent Card context exists
+
+### DEC-056 — Reference consumer transports default to bounded bodies, bounded SSE events, and abort-aware timeouts
+- **Date:** 2026-03-29
+- **Status:** accepted
+- **Choice:** Add transport-level response size caps, per-event SSE size caps, default request and stream-idle timeouts, and caller-provided abort-signal support to the reference HTTP and x402 consumer transports.
+- **Why:** The reference client path should fail safely against stalled or malicious providers by default instead of relying on every integrator to remember to wrap fetches and streams with their own guards.
+- **Alternatives rejected:** Leaving transport reads unbounded, Requiring callers to configure all safety guards explicitly, Using only a total-stream cap instead of per-event bounds plus idle timeout
+
+### DEC-057 — Public provider errors are sanitized by default with explicit diagnostic escape hatches
+- **Date:** 2026-03-29
+- **Status:** accepted
+- **Choice:** Make `PredictionAgent` failed responses and `PredictionHttpServer` JSON-RPC errors use category-safe default messages, while exposing raw details only through explicit `exposeErrorDetails` options and structured `errorReporter` hooks.
+- **Why:** The reference runtime should not leak vendor, configuration, validation, or rate-limit internals by default, but trusted deployments still need a supported path to capture or intentionally expose diagnostics.
+- **Alternatives rejected:** Keeping raw exception strings as the default, Adding new protocol fields for internal diagnostics, Removing access to raw diagnostics entirely
+
+### DEC-058 — Query privacy uses committed requests with local reveal secrets instead of public "blinded" hashes
+- **Date:** 2026-03-29
+- **Status:** accepted
+- **Choice:** Replace the canonical `privacy.mode = "blinded"` path with `privacy.mode = "committed"`, structured `privacy.commitment` metadata, and a query-privacy helper that returns both the redacted request and a local reveal secret for later verification.
+- **Why:** The old deterministic public-hash helper was linkable and overstated its guarantees, while per-request HMAC commitments make repeated requests unlinkable by default and describe the trust model more honestly.
+- **Alternatives rejected:** Keeping deterministic hashes and only renaming them, Using public salted hashes without a local reveal secret, Deferring privacy hardening to deployment-specific wrappers
+
+### DEC-059 — HTTP conformance treats binding and malformed-stream invariants as errors and sanitized invalid-request errors as warnings
+- **Date:** 2026-03-29
+- **Status:** accepted
+- **Choice:** Expand `runHttpProviderConformance(...)` so request/provider binding and stream-shape checks are error-level failures, while default invalid-request error sanitization is covered as warning-level security guidance.
+- **Why:** Binding and stream cardinality are core interoperability invariants, but public error sanitization is a strong default for the reference surface rather than a wire-level requirement every implementation must adopt identically.
+- **Alternatives rejected:** Leaving the new security hardening out of conformance entirely, Making sanitized error strings an error-level interoperability requirement, Treating request/provider binding as warnings only
+
+### DEC-060 — Protocol docs make request binding normative and transport hardening advisory
+- **Date:** 2026-03-29
+- **Status:** accepted
+- **Choice:** Document response and stream request-binding invariants as normative protocol requirements, while keeping transport limits, default public-error sanitization, and other deployment hardening measures as implementer guidance unless already enforced by schemas or conformance errors.
+- **Why:** Request and stream binding are necessary for interoperable correctness across independent implementations, but transport thresholds and public error wording are safer as strong defaults and deployment guidance rather than frozen wire-level requirements in `v0.1.0`.
+- **Alternatives rejected:** Keeping the binding rules only in runtime code and tests, Promoting all reference hardening defaults to protocol MUSTs immediately, Leaving the docs ambiguous about which security behaviors are interoperability requirements

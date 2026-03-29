@@ -78,7 +78,7 @@ Suggested baseline:
 - consensus scoring: required for sensitive deployments
 - anomaly detection: required
 - override / stop controls: required
-- blinded requests: recommended when prompts contain sensitive operational or personal context
+- committed privacy requests: recommended when prompts contain sensitive operational or personal context and the deployment can store local reveal secrets safely
 
 Rationale:
 

@@ -100,6 +100,120 @@ describe("x402 integrations", () => {
     expect(response.status).toBe("completed");
   });
 
+  it("rejects x402 JSON-RPC replies whose id does not match the active request", async () => {
+    const wrappedFetch = vi.fn<typeof fetch>().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        jsonrpc: "2.0",
+        id: "req-other",
+        result: {
+          responseId: "resp-1",
+          requestId: "req-1",
+          status: "completed",
+          createdAt: "2026-03-28T12:01:00Z",
+          provider: {
+            id: "provider-1"
+          },
+          forecast: {
+            type: "binary-probability",
+            domain: "weather.precipitation",
+            horizon: "24h",
+            generatedAt: "2026-03-28T12:01:00Z",
+            probability: 0.5
+          }
+        }
+      })
+    } as Response);
+    x402Mocks.wrapFetchWithPaymentFromConfigMock.mockReturnValue(wrappedFetch);
+
+    const transport = new X402HttpPredictionTransport({
+      baseUrl: "https://provider.example.com",
+      fetchImpl: vi.fn<typeof fetch>(),
+      config: {
+        schemes: []
+      }
+    });
+
+    await expect(
+      transport.send({
+        requestId: "req-1",
+        createdAt: "2026-03-28T12:00:00Z",
+        consumer: {
+          id: "consumer-1"
+        },
+        prediction: {
+          domain: "weather.precipitation",
+          question: "Will it rain?",
+          horizon: "24h",
+          desiredOutput: "binary-probability"
+        }
+      })
+    ).rejects.toThrow("JSON-RPC response id does not match request");
+  });
+
+  it("rejects oversized x402 JSON-RPC response bodies", async () => {
+    const wrappedFetch = vi.fn<typeof fetch>().mockResolvedValue({
+      ok: true,
+      status: 200,
+      body: new ReadableStream({
+        start(controller) {
+          controller.enqueue(
+            new TextEncoder().encode(
+              JSON.stringify({
+                jsonrpc: "2.0",
+                id: "req-1",
+                result: {
+                  responseId: "resp-1",
+                  requestId: "req-1",
+                  status: "completed",
+                  createdAt: "2026-03-28T12:01:00Z",
+                  provider: {
+                    id: "provider-1"
+                  },
+                  forecast: {
+                    type: "binary-probability",
+                    domain: "weather.precipitation",
+                    horizon: "24h",
+                    generatedAt: "2026-03-28T12:01:00Z",
+                    probability: 0.5
+                  }
+                }
+              })
+            )
+          );
+          controller.close();
+        }
+      })
+    } as Response);
+    x402Mocks.wrapFetchWithPaymentFromConfigMock.mockReturnValue(wrappedFetch);
+
+    const transport = new X402HttpPredictionTransport({
+      baseUrl: "https://provider.example.com",
+      maxResponseBytes: 32,
+      fetchImpl: vi.fn<typeof fetch>(),
+      config: {
+        schemes: []
+      }
+    });
+
+    await expect(
+      transport.send({
+        requestId: "req-1",
+        createdAt: "2026-03-28T12:00:00Z",
+        consumer: {
+          id: "consumer-1"
+        },
+        prediction: {
+          domain: "weather.precipitation",
+          question: "Will it rain?",
+          horizon: "24h",
+          desiredOutput: "binary-probability"
+        }
+      })
+    ).rejects.toThrow("response body exceeded maximum size");
+  });
+
   it("creates express middleware from a server instance", () => {
     const middlewareStub = vi.fn(async () => undefined);
     x402Mocks.paymentMiddlewareMock.mockReturnValue(middlewareStub);

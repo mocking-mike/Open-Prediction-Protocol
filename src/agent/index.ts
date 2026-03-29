@@ -3,6 +3,15 @@ import { randomUUID } from "node:crypto";
 import type { PaymentProvider } from "../payments/index.js";
 import type { NegotiatedPayment } from "../payments/index.js";
 import { PaymentNegotiator } from "../payments/negotiator.js";
+import type {
+  PredictionPublicErrorCategory,
+  PredictionPublicErrorEvent,
+  PredictionPublicErrorOptions
+} from "../errors/public.js";
+import {
+  reportPredictionPublicError,
+  resolvePredictionPublicErrorMessage
+} from "../errors/public.js";
 import type { DidKeyIdentity } from "../security/identity.js";
 import { signPredictionResponse } from "../security/identity.js";
 import type { RateLimiter } from "../security/rate-limiter.js";
@@ -43,6 +52,8 @@ export interface PredictionAgentOptions {
   paymentProviders?: PaymentProvider[];
   identity?: Pick<DidKeyIdentity, "did" | "privateKey">;
   rateLimiter?: RateLimiter;
+  exposeErrorDetails?: PredictionPublicErrorOptions["exposeErrorDetails"];
+  errorReporter?: PredictionPublicErrorOptions["errorReporter"];
 }
 
 export class PredictionAgent {
@@ -52,6 +63,8 @@ export class PredictionAgent {
   readonly paymentProviders: PaymentProvider[];
   readonly identity?: PredictionAgentOptions["identity"];
   readonly rateLimiter: RateLimiter | undefined;
+  readonly exposeErrorDetails: boolean;
+  readonly errorReporter?: PredictionAgentOptions["errorReporter"];
 
   constructor(options: PredictionAgentOptions) {
     this.provider = options.provider;
@@ -60,6 +73,8 @@ export class PredictionAgent {
     this.paymentProviders = options.paymentProviders ?? [];
     this.identity = options.identity;
     this.rateLimiter = options.rateLimiter;
+    this.exposeErrorDetails = options.exposeErrorDetails ?? false;
+    this.errorReporter = options.errorReporter;
   }
 
   async *streamRequest(
@@ -116,13 +131,20 @@ export class PredictionAgent {
     assertValidPredictionRequest(request);
     throwIfAborted(context.signal);
 
+    let errorCategory: PredictionPublicErrorCategory = "internal";
+
     try {
+      errorCategory = "payment";
       const negotiatedPayment = this.selectPayment(request);
+      errorCategory = "rate_limit";
       await this.applyRateLimitIfConfigured(request, negotiatedPayment);
+      errorCategory = "payment";
       await this.authorizePaymentIfNeeded(request, negotiatedPayment);
       throwIfAborted(context.signal);
+      errorCategory = "handler";
       const result = await this.handler(request, context);
       throwIfAborted(context.signal);
+      errorCategory = "internal";
       const response: PredictionResponse = {
         responseId: randomUUID(),
         requestId: request.requestId,
@@ -161,7 +183,19 @@ export class PredictionAgent {
         throw createAbortError();
       }
 
-      const message = error instanceof Error ? error.message : "Prediction handler failed";
+      const message = resolvePredictionPublicErrorMessage(
+        error,
+        errorCategory,
+        this.exposeErrorDetails
+      );
+      this.reportPublicError({
+        error,
+        surface: "prediction-response",
+        category: errorCategory,
+        publicMessage: message,
+        requestId: request.requestId,
+        providerId: this.getProviderIdentity().id
+      });
       const response: PredictionResponse = {
         responseId: randomUUID(),
         requestId: request.requestId,
@@ -251,6 +285,10 @@ export class PredictionAgent {
     }
 
     return this.provider;
+  }
+
+  private reportPublicError(event: PredictionPublicErrorEvent): void {
+    reportPredictionPublicError(this.errorReporter, event);
   }
 }
 

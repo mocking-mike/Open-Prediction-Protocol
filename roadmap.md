@@ -149,6 +149,31 @@ pnpm run typecheck && pnpm test && pnpm run integration && pnpm run build
 
 ---
 
+### Milestone 6 — Runtime Trust & Security Hardening
+**Goal:** Close the remaining security gaps on the reference consumer, transport, privacy, and error-handling paths so OPP is safer against malicious or confused providers and clearer about its security guarantees.
+
+> [!NOTE]
+> This milestone is the follow-up to the supplemental runtime trust-path review recorded in `spec/security-review.md`.
+
+| # | Task | Purpose |
+|---|---|---|
+| [x] 6.1 | Bind JSON-RPC replies and prediction responses to the originating request across client transports, `PredictionClient`, aggregation, and MCP flows | Prevent replay and substituted results |
+| [x] 6.2 | Enforce provider identity matching between discovered Agent Cards, response metadata, and verified signatures | Prevent cross-provider trust confusion |
+| [x] 6.3 | Bind streaming lifecycle and terminal result events to the active request and reject malformed or mismatched streams | Safer long-running request consumption |
+| [x] 6.4 | Add SSE and HTTP response size limits, frame limits, timeout handling, and abort hooks on consumer transports | Bound resource-exhaustion risk |
+| [x] 6.5 | Sanitize default public error messages while preserving structured internal diagnostics for trusted deployments | Reduce information disclosure |
+| [x] 6.6 | Replace or rename deterministic "blinded" hashing with a stronger privacy mode and explicit documentation of guarantees | Honest and stronger privacy semantics |
+| [x] 6.7 | Expand conformance and regression tests for request binding, provider identity mismatches, malicious streams, and sanitized errors | Prevent security regressions |
+| [x] 6.8 | Update protocol and implementer docs with runtime trust-path requirements and deployment caveats | Better security guidance |
+
+**Verification:**
+```bash
+pnpm run typecheck && pnpm test && pnpm run build:all
+# plus targeted trust-path, malicious-stream, and error-sanitization regression coverage
+```
+
+---
+
 ## Milestone Summary
 
 ```mermaid
@@ -185,6 +210,12 @@ gantt
     Privacy and anomaly detection     :m5b, after m5a, 3d
     Compliance and fiat rails         :m5c, after m5b, 4d
     Conditional triggers and CLI      :m5d, after m5c, 2d
+
+    section M6 – Security Hardening
+    Request and provider binding      :m6a, after m5d, 3d
+    Transport and stream limits       :m6b, after m6a, 2d
+    Privacy and error hardening       :m6c, after m6b, 3d
+    Docs and conformance updates      :m6d, after m6c, 2d
 ```
 
 | Milestone | Focus | Est. Effort |
@@ -193,7 +224,8 @@ gantt
 | **M2** | Reference SDK and demo providers | Complete |
 | **M3** | Identity, payments, MCP integration, aggregation | Complete, including identity, x402 payments, MCP tools, aggregation, rate limiting, SSE lifecycle streaming, and demo examples |
 | **M4** | Calibration metadata, observability, production hardening | Complete |
-| **M5** | Advanced verification, privacy, compliance, scaffolding | Complete |
+| **M5** | Advanced verification, privacy, compliance, scaffolding | Complete, with privacy and trust-path follow-up hardening now tracked in M6 |
+| **M6** | Runtime trust-path, transport, privacy, and error-surface hardening | In progress |
 
 ---
 

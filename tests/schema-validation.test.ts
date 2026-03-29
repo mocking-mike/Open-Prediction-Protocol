@@ -248,6 +248,83 @@ describe("prediction-request schema", () => {
 
     expect(result.valid).toBe(false);
   });
+
+  it("accepts a committed privacy request with structured commitments", async () => {
+    const result = await validateSchema("prediction-request.schema.json", {
+      requestId: "req-privacy-123",
+      createdAt: "2026-03-29T12:00:00Z",
+      consumer: {
+        id: "consumer-1"
+      },
+      prediction: {
+        domain: "weather.precipitation",
+        question: "[REDACTED]",
+        horizon: "24h",
+        desiredOutput: "binary-probability",
+        context: {
+          location: "Warsaw"
+        }
+      },
+      privacy: {
+        mode: "committed",
+        commitment: {
+          scheme: "opp-hmac-sha256-v1",
+          question: "abc123",
+          context: "def456",
+          redactedKeys: ["signalSource"]
+        }
+      }
+    });
+
+    expect(result.valid, result.errors.join("\n")).toBe(true);
+  });
+
+  it("rejects a committed privacy request without a commitment object", async () => {
+    const result = await validateSchema("prediction-request.schema.json", {
+      requestId: "req-privacy-123",
+      createdAt: "2026-03-29T12:00:00Z",
+      consumer: {
+        id: "consumer-1"
+      },
+      prediction: {
+        domain: "weather.precipitation",
+        question: "[REDACTED]",
+        horizon: "24h",
+        desiredOutput: "binary-probability"
+      },
+      privacy: {
+        mode: "committed"
+      }
+    });
+
+    expect(result.valid).toBe(false);
+  });
+
+  it("rejects commitment metadata when privacy.mode is not committed", async () => {
+    const result = await validateSchema("prediction-request.schema.json", {
+      requestId: "req-privacy-123",
+      createdAt: "2026-03-29T12:00:00Z",
+      consumer: {
+        id: "consumer-1"
+      },
+      prediction: {
+        domain: "weather.precipitation",
+        question: "Will it rain?",
+        horizon: "24h",
+        desiredOutput: "binary-probability"
+      },
+      privacy: {
+        mode: "plain",
+        commitment: {
+          scheme: "opp-hmac-sha256-v1",
+          question: "abc123",
+          context: "def456"
+        }
+      }
+    });
+
+    expect(result.valid).toBe(false);
+  });
 });
 
 describe("prediction-response schema", () => {

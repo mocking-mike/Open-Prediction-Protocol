@@ -22,7 +22,33 @@ const forecastTypeSchema = z.enum([
 
 const verificationStatusSchema = z.enum(["self-reported", "provisional", "verified"]);
 const paymentMethodSchema = z.enum(["free", "x402", "stripe", "custom"]);
-const privacyModeSchema = z.enum(["plain", "blinded"]);
+const privacyModeSchema = z.enum(["plain", "committed"]);
+const privacySchema = z.object({
+  mode: privacyModeSchema.optional(),
+  commitment: z.object({
+    scheme: z.literal("opp-hmac-sha256-v1"),
+    question: z.string().min(1),
+    context: z.string().min(1),
+    resolution: z.string().min(1).optional(),
+    redactedKeys: z.array(z.string().min(1)).optional()
+  }).strict().optional()
+}).strict().superRefine((value, context) => {
+  if (value.mode === "committed" && !value.commitment) {
+    context.addIssue({
+      code: "custom",
+      path: ["commitment"],
+      message: "commitment is required when privacy.mode is committed"
+    });
+  }
+
+  if (value.commitment && value.mode !== "committed") {
+    context.addIssue({
+      code: "custom",
+      path: ["mode"],
+      message: "privacy.mode must be committed when commitment metadata is present"
+    });
+  }
+});
 
 const agentIdentitySchema = z.object({
   id: z.string().min(1),
@@ -49,9 +75,7 @@ export const predictionRequestInputSchema = z.object({
       humanOversightRequired: z.boolean().optional()
     }).strict().optional()
   }).strict().optional(),
-  privacy: z.object({
-    mode: privacyModeSchema.optional()
-  }).strict().optional(),
+  privacy: privacySchema.optional(),
   payment: z.object({
     preferredMethod: paymentMethodSchema.optional()
   }).strict().optional()
@@ -142,7 +166,11 @@ export function createPredictionMcpServer(
       }
 
       const validatedAgentCard = client.validateAgentCard(provider.agentCard);
-      const response = await client.request(request as PredictionRequest, provider.transport);
+      const response = await client.request(
+        request as PredictionRequest,
+        provider.transport,
+        validatedAgentCard
+      );
 
       return {
         content: [

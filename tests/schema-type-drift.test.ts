@@ -105,7 +105,14 @@ describe("schema and type drift guard", () => {
         }
       },
       privacy: {
-        mode: "plain"
+        mode: "committed",
+        commitment: {
+          scheme: "opp-hmac-sha256-v1",
+          question: "question-commitment",
+          context: "context-commitment",
+          resolution: "resolution-commitment",
+          redactedKeys: ["thresholdMm"]
+        }
       },
       payment: {
         preferredMethod: "x402"

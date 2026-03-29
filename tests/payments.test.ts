@@ -252,7 +252,7 @@ describe("payments", () => {
     if (response.status !== "failed") {
       throw new Error("Expected failed response");
     }
-    expect(response.error.message).toContain("No payment provider configured");
+    expect(response.error.message).toBe("Payment requirements not satisfied");
   });
 
   it("lets PredictionAgent use negotiated x402 authorization when configured", async () => {
@@ -373,6 +373,6 @@ describe("payments", () => {
     if (response.status !== "failed") {
       throw new Error("Expected failed response");
     }
-    expect(response.error.message).toContain("Payment authorization failed");
+    expect(response.error.message).toBe("Payment requirements not satisfied");
   });
 });

@@ -1,51 +1,71 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  createBlindedPredictionRequest,
-  isBlindedPredictionRequest,
-  verifyBlindedPredictionReveal
+  createCommittedPredictionRequest,
+  isCommittedPredictionRequest,
+  verifyCommittedPredictionReveal
 } from "../src/security/query-privacy.js";
 import type { PredictionRequest } from "../src/types/index.js";
 
 describe("query privacy", () => {
-  it("creates a schema-compatible blinded prediction request", () => {
+  it("creates a schema-compatible committed prediction request plus a local reveal secret", () => {
     const request = createRequest();
 
-    const blinded = createBlindedPredictionRequest(request, {
+    const { request: committed, reveal } = createCommittedPredictionRequest(request, {
       preserveContextKeys: ["location"]
     });
 
-    expect(blinded.privacy?.mode).toBe("blinded");
-    expect(blinded.prediction.question).toBe("[BLINDED]");
-    expect(blinded.prediction.resolution).toBe("[BLINDED]");
-    expect(blinded.prediction.context).toMatchObject({
-      location: "Warsaw",
-      _blinded: true,
-      _questionHash: expect.any(String),
-      _resolutionHash: expect.any(String),
-      _contextHash: expect.any(String),
-      _redactedKeys: ["signalSource", "thresholdMm"]
+    expect(committed.privacy?.mode).toBe("committed");
+    expect(committed.prediction.question).toBe("[REDACTED]");
+    expect(committed.prediction.resolution).toBe("[REDACTED]");
+    expect(committed.prediction.context).toEqual({
+      location: "Warsaw"
     });
-    expect(isBlindedPredictionRequest(blinded)).toBe(true);
+    expect(committed.privacy?.commitment).toMatchObject({
+      scheme: "opp-hmac-sha256-v1",
+      question: expect.any(String),
+      resolution: expect.any(String),
+      context: expect.any(String),
+      redactedKeys: ["signalSource", "thresholdMm"]
+    });
+    expect(reveal).toMatchObject({
+      scheme: "opp-hmac-sha256-v1",
+      secret: expect.any(String)
+    });
+    expect(isCommittedPredictionRequest(committed)).toBe(true);
   });
 
-  it("verifies a blinded request against the original reveal", () => {
+  it("verifies a committed request against the original reveal and local secret", () => {
     const request = createRequest();
-    const blinded = createBlindedPredictionRequest(request, {
+    const { request: committed, reveal } = createCommittedPredictionRequest(request, {
       preserveContextKeys: ["location"]
     });
 
     expect(
-      verifyBlindedPredictionReveal({
-        blindedRequest: blinded,
-        originalRequest: request
+      verifyCommittedPredictionReveal({
+        committedRequest: committed,
+        originalRequest: request,
+        reveal
       })
     ).toBe(true);
   });
 
+  it("uses a fresh commitment secret so identical requests are not linkable by default", () => {
+    const request = createRequest();
+    const first = createCommittedPredictionRequest(request);
+    const second = createCommittedPredictionRequest(request);
+
+    expect(first.request.privacy?.commitment?.question).not.toBe(
+      second.request.privacy?.commitment?.question
+    );
+    expect(first.request.privacy?.commitment?.context).not.toBe(
+      second.request.privacy?.commitment?.context
+    );
+  });
+
   it("rejects reveal verification when the original question does not match", () => {
     const request = createRequest();
-    const blinded = createBlindedPredictionRequest(request);
+    const { request: committed, reveal } = createCommittedPredictionRequest(request);
 
     const tampered: PredictionRequest = {
       ...request,
@@ -56,9 +76,51 @@ describe("query privacy", () => {
     };
 
     expect(
-      verifyBlindedPredictionReveal({
-        blindedRequest: blinded,
-        originalRequest: tampered
+      verifyCommittedPredictionReveal({
+        committedRequest: committed,
+        originalRequest: tampered,
+        reveal
+      })
+    ).toBe(false);
+  });
+
+  it("rejects reveal verification when the reveal secret does not match", () => {
+    const request = createRequest();
+    const { request: committed } = createCommittedPredictionRequest(request);
+
+    expect(
+      verifyCommittedPredictionReveal({
+        committedRequest: committed,
+        originalRequest: request,
+        reveal: {
+          scheme: "opp-hmac-sha256-v1",
+          secret: "wrong-secret"
+        }
+      })
+    ).toBe(false);
+  });
+
+  it("rejects reveal verification when preserved visible context no longer matches the original request", () => {
+    const request = createRequest();
+    const { request: committed, reveal } = createCommittedPredictionRequest(request, {
+      preserveContextKeys: ["location"]
+    });
+
+    const tamperedCommitted: PredictionRequest = {
+      ...committed,
+      prediction: {
+        ...committed.prediction,
+        context: {
+          location: "Berlin"
+        }
+      }
+    };
+
+    expect(
+      verifyCommittedPredictionReveal({
+        committedRequest: tamperedCommitted,
+        originalRequest: request,
+        reveal
       })
     ).toBe(false);
   });

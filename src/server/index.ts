@@ -1,7 +1,12 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 
 import { PredictionAgent } from "../agent/index.js";
-import { assertValidAgentCard } from "../schemas/index.js";
+import type { PredictionPublicErrorEvent, PredictionPublicErrorOptions } from "../errors/public.js";
+import {
+  reportPredictionPublicError,
+  resolvePredictionPublicErrorMessage
+} from "../errors/public.js";
+import { SchemaValidationError, assertValidAgentCard } from "../schemas/index.js";
 import type { AgentCard, PredictionStreamEvent } from "../types/index.js";
 
 interface JsonRpcRequest {
@@ -31,17 +36,23 @@ const MAX_REQUEST_BODY_BYTES = 1_048_576;
 export interface PredictionHttpServerOptions {
   agentCard: AgentCard;
   predictionAgent: PredictionAgent;
+  exposeErrorDetails?: PredictionPublicErrorOptions["exposeErrorDetails"];
+  errorReporter?: PredictionPublicErrorOptions["errorReporter"];
 }
 
 export class PredictionHttpServer {
   private readonly agentCard: AgentCard;
   private readonly predictionAgent: PredictionAgent;
+  private readonly exposeErrorDetails: boolean;
+  private readonly errorReporter?: PredictionHttpServerOptions["errorReporter"];
   private server: Server | undefined;
 
   constructor(options: PredictionHttpServerOptions) {
     assertValidAgentCard(options.agentCard);
     this.agentCard = options.agentCard;
     this.predictionAgent = options.predictionAgent;
+    this.exposeErrorDetails = options.exposeErrorDetails ?? false;
+    this.errorReporter = options.errorReporter;
   }
 
   async listen(port = 0, host = "127.0.0.1"): Promise<{ port: number; host: string }> {
@@ -141,7 +152,27 @@ export class PredictionHttpServer {
       const result = await this.predictionAgent.handleRequest(payload.params);
       this.sendJson(response, 200, this.rpcSuccess(payload.id ?? null, result));
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Request validation failed";
+      const category = classifyJsonRpcError(error);
+      const message = resolvePredictionPublicErrorMessage(
+        error,
+        category,
+        this.exposeErrorDetails
+      );
+      const event: PredictionPublicErrorEvent = {
+        error,
+        surface: "json-rpc",
+        category,
+        publicMessage: message,
+        method: payload.method
+      };
+      const requestId = normalizeRequestId(payload.id);
+      if (requestId) {
+        event.requestId = requestId;
+      }
+      if (this.agentCard.identity?.id) {
+        event.providerId = this.agentCard.identity.id;
+      }
+      this.reportPublicError(event);
       this.sendJson(response, 400, this.rpcError(payload.id ?? null, -32000, message));
     }
   }
@@ -163,19 +194,41 @@ export class PredictionHttpServer {
     response.once("close", abortStream);
 
     try {
-      response.statusCode = 200;
-      response.setHeader("cache-control", "no-cache, no-transform");
-      response.setHeader("connection", "keep-alive");
-      response.setHeader("content-type", "text/event-stream; charset=utf-8");
-      response.flushHeaders();
-
-      for await (const event of this.predictionAgent.streamRequest(payload.params, {
+      const stream = this.predictionAgent.streamRequest(payload.params, {
         signal: abortController.signal
-      })) {
+      });
+      const iterator = stream[Symbol.asyncIterator]();
+
+      try {
+        const firstEvent = await iterator.next();
         if (abortController.signal.aborted) {
-          break;
+          response.end();
+          return;
         }
-        response.write(this.serializeSseEvent(event));
+
+        response.statusCode = 200;
+        response.setHeader("cache-control", "no-cache, no-transform");
+        response.setHeader("connection", "keep-alive");
+        response.setHeader("content-type", "text/event-stream; charset=utf-8");
+        response.flushHeaders();
+
+        if (!firstEvent.done) {
+          response.write(this.serializeSseEvent(firstEvent.value));
+        }
+
+        while (true) {
+          const nextEvent = await iterator.next();
+          if (nextEvent.done) {
+            break;
+          }
+
+          if (abortController.signal.aborted) {
+            break;
+          }
+          response.write(this.serializeSseEvent(nextEvent.value));
+        }
+      } finally {
+        await iterator.return?.();
       }
 
       if (!abortController.signal.aborted) {
@@ -187,12 +240,33 @@ export class PredictionHttpServer {
         return;
       }
 
+      const category = classifyJsonRpcError(error);
+      const message = resolvePredictionPublicErrorMessage(
+        error,
+        category,
+        this.exposeErrorDetails
+      );
+      const event: PredictionPublicErrorEvent = {
+        error,
+        surface: "json-rpc",
+        category,
+        publicMessage: message,
+        method: payload.method
+      };
+      const requestId = normalizeRequestId(payload.id);
+      if (requestId) {
+        event.requestId = requestId;
+      }
+      if (this.agentCard.identity?.id) {
+        event.providerId = this.agentCard.identity.id;
+      }
+      this.reportPublicError(event);
+
       if (response.headersSent) {
         response.end();
         return;
       }
 
-      const message = error instanceof Error ? error.message : "Request validation failed";
       this.sendJson(response, 400, this.rpcError(payload.id ?? null, -32000, message));
     } finally {
       request.off("aborted", abortStream);
@@ -248,6 +322,22 @@ export class PredictionHttpServer {
     const eventName = event.type === "lifecycle" ? "lifecycle" : "result";
     return `event: ${eventName}\ndata: ${JSON.stringify(event)}\n\n`;
   }
+
+  private reportPublicError(event: PredictionPublicErrorEvent): void {
+    reportPredictionPublicError(this.errorReporter, event);
+  }
 }
 
 export * from "./x402-express.js";
+
+function classifyJsonRpcError(error: unknown): "validation" | "internal" {
+  return error instanceof SchemaValidationError ? "validation" : "internal";
+}
+
+function normalizeRequestId(id: string | number | null | undefined): string | undefined {
+  if (id === null || id === undefined) {
+    return undefined;
+  }
+
+  return String(id);
+}

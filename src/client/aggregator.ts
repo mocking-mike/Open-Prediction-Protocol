@@ -85,7 +85,7 @@ export class PredictionAggregator {
         this.client.validateAgentCard(provider.agentCard);
 
         try {
-          const response = await this.client.request(request, provider.transport);
+          const response = await this.client.request(request, provider.transport, provider.agentCard);
           return {
             agentCard: provider.agentCard,
             response

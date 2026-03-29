@@ -33,9 +33,8 @@ async function main(): Promise<void> {
     const agentCardResponse = await fetch("http://127.0.0.1:3010/.well-known/agent.json");
     const healthResponse = await fetch("http://127.0.0.1:3010/health");
 
-    const agentCard = await agentCardResponse.json();
+    const agentCard = client.validateAgentCard(await agentCardResponse.json());
     const health = (await healthResponse.json()) as { status: string };
-    client.validateAgentCard(agentCard);
 
     if (health.status !== "ok") {
       throw new Error("Health check failed");
@@ -60,7 +59,8 @@ async function main(): Promise<void> {
           }
         }
       },
-      transport
+      transport,
+      agentCard
     );
 
     console.log(

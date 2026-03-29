@@ -190,7 +190,7 @@ OPP defines security-relevant metadata and lifecycle expectations for agent-to-a
 
 1. **Identity and Replay Protection**: freshness bounds, nonces, and recipient binding reduce replay risk.
 2. **Rate Limits and Spending Caps**: consumers and providers can express operational constraints that reduce runaway fan-out or spend.
-3. **Optional Query Privacy**: the protocol can carry privacy preferences for sensitive requests.
+3. **Optional Query Privacy**: the protocol can carry committed privacy preferences for sensitive requests, allowing cleartext prompts to be replaced with reveal-verifiable commitments.
 4. **Operational Anomaly Signals**: later implementations may publish signals related to suspicious behavior or trust degradation.
 
 These safeguards should be implemented in layers. The protocol carries the necessary hooks even when not every deployment implements every control from day one.

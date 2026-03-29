@@ -184,7 +184,7 @@ describe("PredictionAgent rate limiting", () => {
     if (second.status !== "failed") {
       throw new Error("Expected failed response");
     }
-    expect(second.error.message).toContain("Rate limit exceeded");
+    expect(second.error.message).toBe("Prediction request rate limited");
   });
 
   it("applies spend caps before payment authorization", async () => {
@@ -238,6 +238,6 @@ describe("PredictionAgent rate limiting", () => {
     if (response.status !== "failed") {
       throw new Error("Expected failed response");
     }
-    expect(response.error.message).toContain("Spend limit exceeded");
+    expect(response.error.message).toBe("Prediction request rate limited");
   });
 });

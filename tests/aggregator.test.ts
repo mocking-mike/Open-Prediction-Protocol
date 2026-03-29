@@ -96,6 +96,39 @@ describe("PredictionAggregator", () => {
     expect(results[1]!.error).toBe("provider unavailable");
   });
 
+  it("rejects provider identity mismatches on the aggregation runtime path", async () => {
+    const aggregator = new PredictionAggregator();
+    const results = await aggregator.fanOut(request, [
+      createProvider(
+        {
+          name: "trusted-provider",
+          identity: {
+            id: "trusted-provider"
+          }
+        },
+        {
+          responseId: "resp-1",
+          requestId: "agg-1",
+          status: "completed",
+          createdAt: "2026-03-28T12:01:00Z",
+          provider: {
+            id: "unexpected-provider"
+          },
+          forecast: {
+            type: "binary-probability",
+            domain: "weather.precipitation",
+            horizon: "24h",
+            generatedAt: "2026-03-28T12:01:00Z",
+            probability: 0.4
+          }
+        }
+      )
+    ]);
+
+    expect(results).toHaveLength(1);
+    expect(results[0]!.error).toContain("provider id does not match Agent Card identity");
+  });
+
   it("aggregates binary forecasts with equal weighting by default", async () => {
     const aggregator = new PredictionAggregator();
     const result = await aggregator.aggregate(request, [
