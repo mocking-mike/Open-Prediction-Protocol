@@ -1,4 +1,10 @@
-import type { AgentCard, PredictionCapability, PredictionRequest, PredictionResponse } from "../types/index.js";
+import type {
+  AgentCard,
+  AgentIdentity,
+  PredictionCapability,
+  PredictionRequest,
+  PredictionResponse
+} from "../types/index.js";
 import {
   validateAgentCard,
   validatePredictionResponse
@@ -105,21 +111,68 @@ export async function runHttpProviderConformance(
   pushCheck(checks, "rpc.jsonrpc", rpcPayload.jsonrpc === "2.0", "error", [
     "JSON-RPC response must declare jsonrpc = 2.0"
   ]);
+  pushCheck(checks, "rpc.idBinding", rpcPayload.id === request.requestId, "error", [
+    "JSON-RPC response id must match the originating request id"
+  ]);
   pushCheck(checks, "rpc.result", Boolean(rpcPayload.result) && !rpcPayload.error, "error", [
     "predictions.request must return a JSON-RPC result for a valid request"
   ]);
+  const predictionResponse = parsePredictionResponse(rpcPayload.result);
   pushCheck(
     checks,
     "rpc.responseSchema",
-    validatePredictionResponse(rpcPayload.result),
+    Boolean(predictionResponse),
     "error",
     ["Prediction result must validate against prediction-response.schema.json"]
   );
-
-  const predictionResponse = rpcPayload.result as PredictionResponse | undefined;
   if (predictionResponse) {
     pushCheck(checks, "rpc.requestBinding", predictionResponse.requestId === request.requestId, "error", [
       "Prediction response must preserve requestId"
+    ]);
+    pushCheck(
+      checks,
+      "rpc.forecastDomainBinding",
+      predictionResponse.status !== "completed" || predictionResponse.forecast.domain === request.prediction.domain,
+      "error",
+      ["Completed prediction responses must preserve the requested domain"]
+    );
+    pushCheck(
+      checks,
+      "rpc.forecastHorizonBinding",
+      predictionResponse.status !== "completed" || predictionResponse.forecast.horizon === request.prediction.horizon,
+      "error",
+      ["Completed prediction responses must preserve the requested horizon"]
+    );
+    pushCheck(
+      checks,
+      "rpc.forecastTypeBinding",
+      predictionResponse.status !== "completed" ||
+        predictionResponse.forecast.type === request.prediction.desiredOutput,
+      "error",
+      ["Completed prediction responses must preserve the requested output type"]
+    );
+    pushCheck(
+      checks,
+      "rpc.providerBinding",
+      matchesAgentCardIdentity(agentCard, predictionResponse.provider),
+      "error",
+      ["Prediction response provider identity must match Agent Card identity metadata when advertised"]
+    );
+  } else {
+    pushCheck(checks, "rpc.requestBinding", false, "error", [
+      "Prediction response must preserve requestId"
+    ]);
+    pushCheck(checks, "rpc.forecastDomainBinding", false, "error", [
+      "Completed prediction responses must preserve the requested domain"
+    ]);
+    pushCheck(checks, "rpc.forecastHorizonBinding", false, "error", [
+      "Completed prediction responses must preserve the requested horizon"
+    ]);
+    pushCheck(checks, "rpc.forecastTypeBinding", false, "error", [
+      "Completed prediction responses must preserve the requested output type"
+    ]);
+    pushCheck(checks, "rpc.providerBinding", false, "error", [
+      "Prediction response provider identity must match Agent Card identity metadata when advertised"
     ]);
   }
 
@@ -155,9 +208,17 @@ export async function runHttpProviderConformance(
   const lifecycleStates = streamEvents
     .filter((event): event is { type: "lifecycle"; state: string } => event.type === "lifecycle")
     .map((event) => event.state);
-  const streamResult = streamEvents.find(
+  const lifecycleRequestIds = streamEvents
+    .filter((event): event is StreamLifecycleEvent => event.type === "lifecycle")
+    .map((event) => event.requestId);
+  const lifecycleProviders = streamEvents.flatMap((event) =>
+    event.type === "lifecycle" && event.provider ? [event.provider] : []
+  );
+  const streamResults = streamEvents.filter(
     (event): event is { type: "result"; response: unknown } => event.type === "result"
   );
+  const streamResult = streamResults[0];
+  const streamPredictionResponse = parsePredictionResponse(streamResult?.response);
 
   pushCheck(checks, "stream.submitted", lifecycleStates.includes("submitted"), "error", [
     "Streaming lifecycle must include submitted"
@@ -168,12 +229,65 @@ export async function runHttpProviderConformance(
   pushCheck(checks, "stream.result", Boolean(streamResult), "error", [
     "Streaming lifecycle must include one terminal result event"
   ]);
+  pushCheck(checks, "stream.resultCardinality", streamResults.length === 1, "error", [
+    "Streaming lifecycle must include exactly one terminal result event"
+  ]);
+  pushCheck(
+    checks,
+    "stream.terminalResultLast",
+    streamEvents.length > 0 && streamEvents[streamEvents.length - 1]?.type === "result",
+    "error",
+    ["Streaming lifecycle must end with the terminal result event"]
+  );
   pushCheck(
     checks,
     "stream.resultSchema",
-    validatePredictionResponse(streamResult?.response),
+    Boolean(streamPredictionResponse),
     "error",
     ["Streaming result payload must validate against prediction-response.schema.json"]
+  );
+  pushCheck(
+    checks,
+    "stream.lifecycleRequestBinding",
+    lifecycleRequestIds.length > 0 && lifecycleRequestIds.every((requestId) => requestId === request.requestId),
+    "error",
+    ["Streaming lifecycle events must preserve requestId"]
+  );
+  pushCheck(
+    checks,
+    "stream.resultRequestBinding",
+    matchesResponseRequestId(streamPredictionResponse, request),
+    "error",
+    ["Streaming terminal responses must preserve requestId"]
+  );
+  pushCheck(
+    checks,
+    "stream.forecastDomainBinding",
+    matchesForecastDomain(streamPredictionResponse, request),
+    "error",
+    ["Streaming terminal responses must preserve the requested domain"]
+  );
+  pushCheck(
+    checks,
+    "stream.forecastHorizonBinding",
+    matchesForecastHorizon(streamPredictionResponse, request),
+    "error",
+    ["Streaming terminal responses must preserve the requested horizon"]
+  );
+  pushCheck(
+    checks,
+    "stream.forecastTypeBinding",
+    matchesForecastType(streamPredictionResponse, request),
+    "error",
+    ["Streaming terminal responses must preserve the requested output type"]
+  );
+  pushCheck(
+    checks,
+    "stream.providerBinding",
+    lifecycleProviders.every((provider) => matchesAgentCardIdentity(agentCard, provider)) &&
+      matchesResponseProvider(agentCard, streamPredictionResponse),
+    "error",
+    ["Streaming provider identities must match Agent Card identity metadata when advertised"]
   );
   pushCheck(
     checks,
@@ -181,6 +295,102 @@ export async function runHttpProviderConformance(
     isValidLifecycleSequence(lifecycleStates),
     "error",
     ["Streaming lifecycle states must follow the documented lifecycle transitions"]
+  );
+
+  const invalidRpcResponse = await fetchImpl(`${baseUrl}/rpc`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      ...options.headers
+    },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: "opp-conformance-invalid-request",
+      method: "predictions.request",
+      params: {}
+    })
+  });
+  pushCheck(checks, "errors.invalidRequest.status", invalidRpcResponse.status === 400, "warning", [
+    "Invalid predictions.request payloads should return HTTP 400"
+  ]);
+  const invalidRpcPayload = (await safeJson(invalidRpcResponse)) as {
+    jsonrpc?: unknown;
+    id?: unknown;
+    result?: unknown;
+    error?: { message?: unknown };
+  };
+  pushCheck(checks, "errors.invalidRequest.jsonrpc", invalidRpcPayload?.jsonrpc === "2.0", "warning", [
+    "Invalid predictions.request payloads should return a JSON-RPC error envelope"
+  ]);
+  pushCheck(
+    checks,
+    "errors.invalidRequest.structured",
+    !invalidRpcPayload?.result &&
+      Boolean(invalidRpcPayload?.error) &&
+      invalidRpcPayload?.id === "opp-conformance-invalid-request",
+    "warning",
+    ["Invalid predictions.request payloads should return a structured JSON-RPC error"]
+  );
+  pushCheck(
+    checks,
+    "errors.invalidRequest.sanitized",
+    invalidRpcPayload?.error?.message === "Request validation failed",
+    "warning",
+    ["Invalid predictions.request payloads should sanitize public validation errors by default"]
+  );
+
+  const invalidStreamResponse = await fetchImpl(`${baseUrl}/rpc`, {
+    method: "POST",
+    headers: {
+      accept: "text/event-stream",
+      "content-type": "application/json",
+      ...options.headers
+    },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: "opp-conformance-invalid-stream-request",
+      method: "tasks/sendSubscribe",
+      params: {}
+    })
+  });
+  pushCheck(checks, "errors.invalidStreamRequest.status", invalidStreamResponse.status === 400, "warning", [
+    "Invalid tasks/sendSubscribe payloads should return HTTP 400"
+  ]);
+  pushCheck(
+    checks,
+    "errors.invalidStreamRequest.contentType",
+    (invalidStreamResponse.headers.get("content-type") ?? "").includes("application/json"),
+    "warning",
+    ["Invalid tasks/sendSubscribe payloads should return JSON-RPC errors before opening an event stream"]
+  );
+  const invalidStreamPayload = (await safeJson(invalidStreamResponse)) as {
+    jsonrpc?: unknown;
+    id?: unknown;
+    result?: unknown;
+    error?: { message?: unknown };
+  };
+  pushCheck(
+    checks,
+    "errors.invalidStreamRequest.jsonrpc",
+    invalidStreamPayload?.jsonrpc === "2.0",
+    "warning",
+    ["Invalid tasks/sendSubscribe payloads should return a JSON-RPC error envelope"]
+  );
+  pushCheck(
+    checks,
+    "errors.invalidStreamRequest.structured",
+    !invalidStreamPayload?.result &&
+      Boolean(invalidStreamPayload?.error) &&
+      invalidStreamPayload?.id === "opp-conformance-invalid-stream-request",
+    "warning",
+    ["Invalid tasks/sendSubscribe payloads should return a structured JSON-RPC error"]
+  );
+  pushCheck(
+    checks,
+    "errors.invalidStreamRequest.sanitized",
+    invalidStreamPayload?.error?.message === "Request validation failed",
+    "warning",
+    ["Invalid tasks/sendSubscribe payloads should sanitize public validation errors by default"]
   );
 
   const report: HttpProviderConformanceReport = {
@@ -254,7 +464,7 @@ async function safeJson(response: Response): Promise<unknown> {
   }
 }
 
-async function readStreamEvents(response: Response): Promise<Array<{ type: string; state?: string; response?: unknown }>> {
+async function readStreamEvents(response: Response): Promise<StreamConformanceEvent[]> {
   if (!response.body) {
     return [];
   }
@@ -262,7 +472,7 @@ async function readStreamEvents(response: Response): Promise<Array<{ type: strin
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
-  const events: Array<{ type: string; state?: string; response?: unknown }> = [];
+  const events: StreamConformanceEvent[] = [];
 
   while (true) {
     const { done, value } = await reader.read();
@@ -292,7 +502,104 @@ async function readStreamEvents(response: Response): Promise<Array<{ type: strin
   return events;
 }
 
-function parseSseFrame(frame: string): { type: string; state?: string; response?: unknown } | undefined {
+function parsePredictionResponse(value: unknown): PredictionResponse | undefined {
+  return validatePredictionResponse(value) ? (value as PredictionResponse) : undefined;
+}
+
+function matchesAgentCardIdentity(agentCard: AgentCard, provider: AgentIdentity): boolean {
+  if (agentCard.identity?.id && provider.id !== agentCard.identity.id) {
+    return false;
+  }
+
+  if (agentCard.identity?.did && provider.did !== agentCard.identity.did) {
+    return false;
+  }
+
+  return true;
+}
+
+function matchesResponseProvider(agentCard: AgentCard, response: PredictionResponse | undefined): boolean {
+  if (!response) {
+    return false;
+  }
+
+  return matchesAgentCardIdentity(agentCard, response.provider);
+}
+
+function matchesResponseRequestId(
+  response: PredictionResponse | undefined,
+  request: PredictionRequest
+): boolean {
+  if (!response) {
+    return false;
+  }
+
+  return response.requestId === request.requestId;
+}
+
+function matchesForecastDomain(
+  response: PredictionResponse | undefined,
+  request: PredictionRequest
+): boolean {
+  if (!response) {
+    return false;
+  }
+
+  if (response.status !== "completed") {
+    return true;
+  }
+
+  return response.forecast.domain === request.prediction.domain;
+}
+
+function matchesForecastHorizon(
+  response: PredictionResponse | undefined,
+  request: PredictionRequest
+): boolean {
+  if (!response) {
+    return false;
+  }
+
+  if (response.status !== "completed") {
+    return true;
+  }
+
+  return response.forecast.horizon === request.prediction.horizon;
+}
+
+function matchesForecastType(
+  response: PredictionResponse | undefined,
+  request: PredictionRequest
+): boolean {
+  if (!response) {
+    return false;
+  }
+
+  if (response.status !== "completed") {
+    return true;
+  }
+
+  return response.forecast.type === request.prediction.desiredOutput;
+}
+
+interface StreamLifecycleEvent {
+  type: "lifecycle";
+  requestId: string;
+  createdAt: string;
+  state: string;
+  provider?: AgentIdentity;
+}
+
+interface StreamConformanceEvent {
+  type: string;
+  requestId?: string;
+  createdAt?: string;
+  state?: string;
+  provider?: AgentIdentity;
+  response?: unknown;
+}
+
+function parseSseFrame(frame: string): StreamConformanceEvent | undefined {
   const trimmed = frame.trim();
   if (!trimmed) {
     return undefined;
@@ -309,7 +616,7 @@ function parseSseFrame(frame: string): { type: string; state?: string; response?
     return undefined;
   }
 
-  return JSON.parse(dataLines.join("\n")) as { type: string; state?: string; response?: unknown };
+  return JSON.parse(dataLines.join("\n")) as StreamConformanceEvent;
 }
 
 function isValidLifecycleSequence(states: string[]): boolean {

@@ -4,6 +4,7 @@ export * from "./compliance/oversight.js";
 export * from "./client/index.js";
 export * from "./compliance/filter.js";
 export * from "./conformance/http.js";
+export * from "./errors/public.js";
 export * from "./lifecycle/index.js";
 export * from "./mcp/prediction-mcp-server.js";
 export * from "./observability/metrics.js";

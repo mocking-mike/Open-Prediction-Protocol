@@ -16,9 +16,14 @@ It verifies:
 - Agent Card schema validity
 - basic health endpoint behavior
 - JSON-RPC request/response behavior
+- JSON-RPC response `id` binding
 - prediction response schema validity
+- response `requestId`, forecast, and provider-identity binding
 - SSE content type and lifecycle/result event flow
 - lifecycle ordering consistency
+- lifecycle and terminal-result request binding
+- stream terminal-result cardinality and "result last" behavior
+- warning-level guidance for sanitized invalid-request and invalid-stream-request public errors
 
 ## Running the Conformance Check
 
@@ -28,7 +33,9 @@ Use the built-in runner against a provider base URL:
 pnpm run conformance:http -- http://127.0.0.1:3001
 ```
 
-The command prints a JSON report and exits non-zero on conformance failures.
+The command prints a JSON report and exits non-zero on error-level conformance failures.
+
+Warning-level checks are advisory security guidance and do not currently fail the command by themselves.
 
 ## Current Limitations
 

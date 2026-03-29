@@ -27,6 +27,7 @@ Requirements:
 - the response body must validate against [agent-card.schema.json](./agent-card.schema.json)
 - `capabilities.predictions` must contain at least one prediction capability
 - every advertised capability should reflect something your provider can actually answer
+- if you advertise `identity`, keep that identity stable across runtime response metadata and signatures
 
 Minimal example:
 
@@ -87,7 +88,11 @@ predictions.request
 Requirements:
 
 - `params` must validate against [prediction-request.schema.json](./prediction-request.schema.json)
+- the JSON-RPC response `id` must match the request `id`
 - on success, `result` must validate against [prediction-response.schema.json](./prediction-response.schema.json)
+- `result.requestId` must match `params.requestId`
+- completed forecasts must preserve the requested `domain`, `horizon`, and `desiredOutput`
+- if you advertise `AgentCard.identity`, emitted response `provider` metadata should match it
 
 Example request:
 
@@ -151,6 +156,10 @@ Requirements:
 - return `Content-Type: text/event-stream`
 - emit `lifecycle` events for progress
 - emit one terminal `result` event whose payload is a valid [prediction-response.schema.json](./prediction-response.schema.json) response
+- preserve `requestId` on every lifecycle event
+- emit exactly one terminal `result` event and stop after it
+- ensure the terminal response preserves the same request and forecast bindings required for non-streaming responses
+- if you advertise `AgentCard.identity`, lifecycle-event and terminal-response `provider` metadata should match it
 
 Current `v0.1.0` reference behavior emits:
 
@@ -159,6 +168,8 @@ Current `v0.1.0` reference behavior emits:
 - one terminal `result`
 
 Lifecycle ordering must follow [prediction-lifecycle.md](./prediction-lifecycle.md).
+
+If validation fails before streaming begins, prefer returning a JSON-RPC error response instead of opening an event stream and then failing immediately.
 
 Example SSE frames:
 
@@ -173,6 +184,9 @@ event: result
 data: {"type":"result","response":{"responseId":"resp-1","requestId":"req-1","status":"completed","createdAt":"2026-03-29T12:00:02Z","provider":{"id":"weather-provider"},"forecast":{"type":"binary-probability","domain":"weather.precipitation","horizon":"24h","generatedAt":"2026-03-29T12:00:02Z","probability":0.42}}}
 ```
 
+For request-level failures, return structured JSON-RPC errors and prefer sanitized public messages by default.
+If operators need raw diagnostics, surface them through trusted logs or explicitly privileged tooling instead of the public protocol response.
+
 ## 6. Optional Metadata
 
 You may include optional metadata such as:
@@ -186,6 +200,8 @@ You may include optional metadata such as:
 - `audit`
 
 If you include them, they must match the schema.
+
+Do not emit stronger trust claims in docs or metadata than your runtime can actually maintain on the wire.
 
 ## 7. Paid Requests
 
@@ -202,6 +218,7 @@ OPP standardizes the transport-level hook, not the internal settlement logic.
 If you return signed responses:
 
 - ensure the response `provider.did` identifies the signer
+- keep `provider.did` aligned with the Agent Card DID when you advertise one
 - ensure the signed payload covers the response body consistently
 - ensure `signature.alg` matches the actual verification algorithm
 
@@ -216,6 +233,11 @@ Before calling your implementation compatible, verify:
 - your `/rpc` endpoint supports `predictions.request`
 - your `/rpc` endpoint supports `tasks/sendSubscribe`
 - your streaming lifecycle order is valid
+- your JSON-RPC response `id`, response `requestId`, and completed forecast fields stay bound to the originating request
+- your lifecycle and terminal stream events stay bound to the originating request
+- your runtime provider identity stays aligned with advertised Agent Card identity when you publish it
+- invalid stream requests fail before opening an SSE stream
+- your default public errors avoid leaking internal implementation details unless you intentionally expose them
 - your provider passes the conformance runner described in [conformance.md](./conformance.md)
 
 ## 10. Recommended Flow

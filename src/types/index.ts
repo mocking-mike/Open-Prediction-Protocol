@@ -2,6 +2,7 @@ export type VerificationStatus = "self-reported" | "provisional" | "verified";
 export type PaymentMethod = "free" | "x402" | "stripe" | "custom";
 export type PaymentModel = "free" | "per-request" | "subscription" | "custom";
 export type ForecastType = "binary-probability" | "categorical-distribution" | "numeric-range";
+export type PredictionPrivacyMode = "plain" | "committed";
 
 export interface AgentIdentity {
   id: string;
@@ -82,7 +83,14 @@ export interface PredictionRequest {
     };
   };
   privacy?: {
-    mode?: "plain" | "blinded";
+    mode?: PredictionPrivacyMode;
+    commitment?: {
+      scheme: "opp-hmac-sha256-v1";
+      question: string;
+      context: string;
+      resolution?: string;
+      redactedKeys?: string[];
+    };
   };
   payment?: {
     preferredMethod?: PaymentMethod;

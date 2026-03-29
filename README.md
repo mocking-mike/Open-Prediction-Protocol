@@ -102,6 +102,29 @@ The SDK includes `PredictionAggregator`, which can:
 - fan out one request to multiple providers
 - merge completed forecasts using equal weighting or calibration weighting
 
+## Privacy Helpers
+
+For sensitive prompts, the SDK now provides committed privacy requests through
+`createCommittedPredictionRequest(...)` in
+[`src/security/query-privacy.ts`](./src/security/query-privacy.ts).
+
+The helper returns:
+
+- a schema-valid OPP request with `privacy.mode = "committed"`
+- structured `privacy.commitment` metadata carried on the wire
+- a local reveal secret that must be stored by the caller if later reveal verification is needed
+
+Current guarantees:
+
+- identical requests are not linkable by passive observers unless the caller deliberately reuses the same reveal secret
+- hidden question, resolution, and redacted context values cannot be brute-forced from the on-wire commitments without the local reveal secret
+- preserved context keys remain visible to the provider
+
+Current caveats:
+
+- this is a commitment-and-reveal helper, not end-to-end encrypted transport
+- the reveal secret should be treated like sensitive local state and disclosed only when later reveal verification is actually needed
+
 ## Current HTTP Surface
 
 The minimal provider HTTP surface is:
@@ -123,6 +146,10 @@ Current method:
 
 - `lifecycle` events for `submitted` and `working`
 - one terminal `result` event containing the normal OPP `PredictionResponse`
+
+The reference client binds JSON-RPC responses, stream lifecycle events, provider identity metadata, and terminal results back to the originating request before surfacing them downstream.
+
+The reference HTTP transports also default to bounded response sizes, bounded SSE event sizes, request timeouts, stream idle timeouts, and caller-driven abort support.
 
 If the client disconnects, the reference server now propagates cancellation to provider-side work through an `AbortSignal`.
 

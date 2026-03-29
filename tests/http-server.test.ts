@@ -187,6 +187,212 @@ describe("PredictionHttpServer", () => {
     expect(response.status).toBe(400);
   });
 
+  it("sanitizes JSON-RPC validation errors by default and reports raw diagnostics", async () => {
+    const reported: {
+      category?: string;
+      publicMessage?: string;
+      method?: string | undefined;
+      requestId?: string | undefined;
+      rawMessage?: string | undefined;
+    } = {};
+
+    server = new PredictionHttpServer({
+      agentCard: {
+        protocolVersion: "0.1.0",
+        name: "weather-provider",
+        url: "https://provider.example.com",
+        capabilities: {
+          predictions: [
+            {
+              id: "weather.precipitation.daily",
+              domain: "weather.precipitation",
+              title: "Daily precipitation probability",
+              output: {
+                type: "binary-probability"
+              },
+              horizons: ["24h"]
+            }
+          ]
+        }
+      },
+      predictionAgent: new PredictionAgent({
+        provider: {
+          id: "provider-1"
+        },
+        handler: async () => ({
+          forecast: {
+            type: "binary-probability",
+            domain: "weather.precipitation",
+            horizon: "24h",
+            generatedAt: "2026-03-28T12:01:00Z",
+            probability: 0.61
+          }
+        })
+      }),
+      errorReporter: (event) => {
+        reported.category = event.category;
+        reported.publicMessage = event.publicMessage;
+        reported.method = event.method;
+        reported.requestId = event.requestId;
+        reported.rawMessage = event.error instanceof Error ? event.error.message : String(event.error);
+      }
+    });
+
+    const address = await server.listen();
+    const response = await fetch(`http://${address.host}:${address.port}/rpc`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: "req-invalid",
+        method: "predictions.request",
+        params: {}
+      })
+    });
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      jsonrpc: "2.0",
+      id: "req-invalid",
+      error: {
+        code: -32000,
+        message: "Request validation failed"
+      }
+    });
+    expect(reported).toMatchObject({
+      category: "validation",
+      publicMessage: "Request validation failed",
+      method: "predictions.request",
+      requestId: "req-invalid"
+    });
+    expect(reported.rawMessage).toContain("requestId");
+  });
+
+  it("can expose detailed JSON-RPC validation errors when configured", async () => {
+    server = new PredictionHttpServer({
+      agentCard: {
+        protocolVersion: "0.1.0",
+        name: "weather-provider",
+        url: "https://provider.example.com",
+        capabilities: {
+          predictions: [
+            {
+              id: "weather.precipitation.daily",
+              domain: "weather.precipitation",
+              title: "Daily precipitation probability",
+              output: {
+                type: "binary-probability"
+              },
+              horizons: ["24h"]
+            }
+          ]
+        }
+      },
+      predictionAgent: new PredictionAgent({
+        provider: {
+          id: "provider-1"
+        },
+        handler: async () => ({
+          forecast: {
+            type: "binary-probability",
+            domain: "weather.precipitation",
+            horizon: "24h",
+            generatedAt: "2026-03-28T12:01:00Z",
+            probability: 0.61
+          }
+        })
+      }),
+      exposeErrorDetails: true
+    });
+
+    const address = await server.listen();
+    const response = await fetch(`http://${address.host}:${address.port}/rpc`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: "req-invalid",
+        method: "predictions.request",
+        params: {}
+      })
+    });
+
+    expect(response.status).toBe(400);
+    const payload = (await response.json()) as {
+      error: {
+        message: string;
+      };
+    };
+    expect(payload.error.message).toContain("requestId");
+  });
+
+  it("returns a structured JSON-RPC error for invalid streamed requests before headers flush", async () => {
+    server = new PredictionHttpServer({
+      agentCard: {
+        protocolVersion: "0.1.0",
+        name: "weather-provider",
+        url: "https://provider.example.com",
+        capabilities: {
+          predictions: [
+            {
+              id: "weather.precipitation.daily",
+              domain: "weather.precipitation",
+              title: "Daily precipitation probability",
+              output: {
+                type: "binary-probability"
+              },
+              horizons: ["24h"]
+            }
+          ]
+        }
+      },
+      predictionAgent: new PredictionAgent({
+        provider: {
+          id: "provider-1"
+        },
+        handler: async () => ({
+          forecast: {
+            type: "binary-probability",
+            domain: "weather.precipitation",
+            horizon: "24h",
+            generatedAt: "2026-03-28T12:01:00Z",
+            probability: 0.61
+          }
+        })
+      })
+    });
+
+    const address = await server.listen();
+    const response = await fetch(`http://${address.host}:${address.port}/rpc`, {
+      method: "POST",
+      headers: {
+        accept: "text/event-stream",
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: "req-invalid-stream",
+        method: "tasks/sendSubscribe",
+        params: {}
+      })
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.headers.get("content-type")).toContain("application/json");
+    await expect(response.json()).resolves.toMatchObject({
+      jsonrpc: "2.0",
+      id: "req-invalid-stream",
+      error: {
+        code: -32000,
+        message: "Request validation failed"
+      }
+    });
+  });
+
   it("aborts provider-side streaming work when the client disconnects", async () => {
     let aborted = false;
 

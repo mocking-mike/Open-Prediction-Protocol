@@ -97,9 +97,71 @@
       "properties": {
         "mode": {
           "type": "string",
-          "enum": ["plain", "blinded"]
+          "enum": ["plain", "committed"]
+        },
+        "commitment": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["scheme", "question", "context"],
+          "properties": {
+            "scheme": {
+              "type": "string",
+              "enum": ["opp-hmac-sha256-v1"]
+            },
+            "question": {
+              "type": "string",
+              "minLength": 1
+            },
+            "context": {
+              "type": "string",
+              "minLength": 1
+            },
+            "resolution": {
+              "type": "string",
+              "minLength": 1
+            },
+            "redactedKeys": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "uniqueItems": true
+            }
+          }
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": ["mode"],
+            "properties": {
+              "mode": {
+                "const": "committed"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "commitment": true
+            },
+            "required": ["commitment"]
+          }
+        },
+        {
+          "if": {
+            "required": ["commitment"]
+          },
+          "then": {
+            "properties": {
+              "mode": {
+                "const": "committed"
+              }
+            },
+            "required": ["mode"]
+          }
+        }
+      ]
     },
     "payment": {
       "type": "object",

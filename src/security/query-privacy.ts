@@ -1,22 +1,37 @@
-import { createHash } from "node:crypto";
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
 import type { PredictionRequest } from "../types/index.js";
 
-const BLINDED_PLACEHOLDER = "[BLINDED]";
+const REDACTED_PLACEHOLDER = "[REDACTED]";
+const COMMITMENT_SCHEME = "opp-hmac-sha256-v1" as const;
+const COMMITMENT_DOMAIN_SEPARATOR = "opp-query-privacy-v1";
 
-export interface CreateBlindedPredictionRequestOptions {
+export interface PredictionPrivacyReveal {
+  scheme: typeof COMMITMENT_SCHEME;
+  secret: string;
+}
+
+export interface CreateCommittedPredictionRequestOptions {
   preserveContextKeys?: string[];
+  reveal?: PredictionPrivacyReveal;
 }
 
-export interface VerifyBlindedPredictionRevealOptions {
-  blindedRequest: PredictionRequest;
+export interface CreateCommittedPredictionRequestResult {
+  request: PredictionRequest;
+  reveal: PredictionPrivacyReveal;
+}
+
+export interface VerifyCommittedPredictionRevealOptions {
+  committedRequest: PredictionRequest;
   originalRequest: PredictionRequest;
+  reveal: PredictionPrivacyReveal;
 }
 
-export function createBlindedPredictionRequest(
+export function createCommittedPredictionRequest(
   request: PredictionRequest,
-  options: CreateBlindedPredictionRequestOptions = {}
-): PredictionRequest {
+  options: CreateCommittedPredictionRequestOptions = {}
+): CreateCommittedPredictionRequestResult {
+  const reveal = options.reveal ?? createPredictionPrivacyReveal();
   const preservedContext = selectPreservedContext(
     request.prediction.context,
     options.preserveContextKeys ?? []
@@ -25,82 +40,166 @@ export function createBlindedPredictionRequest(
     request.prediction.context,
     options.preserveContextKeys ?? []
   );
+  const hasPreservedContext = Object.keys(preservedContext).length > 0;
 
-  const blindedContext: Record<string, unknown> = {
-    ...preservedContext,
-    _blinded: true,
-    _questionHash: hashValue(request.prediction.question),
-    _contextHash: hashValue(request.prediction.context ?? {})
-  };
-
-  if (request.prediction.resolution) {
-    blindedContext._resolutionHash = hashValue(request.prediction.resolution);
-  }
-
-  if (redactedKeys.length > 0) {
-    blindedContext._redactedKeys = redactedKeys;
-  }
-
-  return {
+  const committedRequest: PredictionRequest = {
     ...request,
     prediction: {
       ...request.prediction,
-      question: BLINDED_PLACEHOLDER,
-      ...(request.prediction.resolution ? { resolution: BLINDED_PLACEHOLDER } : {}),
-      context: blindedContext
+      question: REDACTED_PLACEHOLDER,
+      ...(request.prediction.resolution ? { resolution: REDACTED_PLACEHOLDER } : {}),
+      ...(request.prediction.context && hasPreservedContext
+        ? {
+            context: preservedContext
+          }
+        : {})
     },
     privacy: {
       ...(request.privacy ?? {}),
-      mode: "blinded"
+      mode: "committed",
+      commitment: {
+        scheme: COMMITMENT_SCHEME,
+        question: commitValue(reveal.secret, "question", request.prediction.question),
+        context: commitValue(reveal.secret, "context", request.prediction.context ?? {}),
+        ...(request.prediction.resolution
+          ? {
+              resolution: commitValue(
+                reveal.secret,
+                "resolution",
+                request.prediction.resolution
+              )
+            }
+          : {}),
+        ...(redactedKeys.length > 0 ? { redactedKeys } : {})
+      }
     }
+  };
+
+  return {
+    request: committedRequest,
+    reveal
   };
 }
 
-export function isBlindedPredictionRequest(request: PredictionRequest): boolean {
-  return request.privacy?.mode === "blinded";
+export function createPredictionPrivacyReveal(): PredictionPrivacyReveal {
+  return {
+    scheme: COMMITMENT_SCHEME,
+    secret: randomBytes(32).toString("base64url")
+  };
 }
 
-export function verifyBlindedPredictionReveal(
-  options: VerifyBlindedPredictionRevealOptions
+export function isCommittedPredictionRequest(request: PredictionRequest): boolean {
+  return request.privacy?.mode === "committed";
+}
+
+export function verifyCommittedPredictionReveal(
+  options: VerifyCommittedPredictionRevealOptions
 ): boolean {
-  if (!isBlindedPredictionRequest(options.blindedRequest)) {
+  if (!isCommittedPredictionRequest(options.committedRequest)) {
     return false;
   }
 
-  const context = options.blindedRequest.prediction.context;
-  if (!context || typeof context !== "object") {
+  const commitment = options.committedRequest.privacy?.commitment;
+  if (!commitment || commitment.scheme !== COMMITMENT_SCHEME) {
     return false;
   }
 
-  const blindedContext = context as Record<string, unknown>;
-  const questionHash = blindedContext._questionHash;
-  const contextHash = blindedContext._contextHash;
-  const resolutionHash = blindedContext._resolutionHash;
-
-  if (typeof questionHash !== "string" || typeof contextHash !== "string") {
+  if (!matchesCommittedEnvelope(options.committedRequest, options.originalRequest, commitment)) {
     return false;
   }
 
-  if (hashValue(options.originalRequest.prediction.question) !== questionHash) {
+  if (options.reveal.scheme !== COMMITMENT_SCHEME || options.reveal.secret.length === 0) {
     return false;
   }
 
-  if (hashValue(options.originalRequest.prediction.context ?? {}) !== contextHash) {
+  if (
+    !safeEqualHex(
+      commitValue(options.reveal.secret, "question", options.originalRequest.prediction.question),
+      commitment.question
+    )
+  ) {
     return false;
   }
 
-  if (resolutionHash !== undefined) {
-    if (typeof resolutionHash !== "string") {
-      return false;
-    }
+  if (
+    !safeEqualHex(
+      commitValue(options.reveal.secret, "context", options.originalRequest.prediction.context ?? {}),
+      commitment.context
+    )
+  ) {
+    return false;
+  }
 
+  if (commitment.resolution !== undefined) {
     if (!options.originalRequest.prediction.resolution) {
       return false;
     }
 
-    if (hashValue(options.originalRequest.prediction.resolution) !== resolutionHash) {
+    if (
+      !safeEqualHex(
+        commitValue(
+          options.reveal.secret,
+          "resolution",
+          options.originalRequest.prediction.resolution
+        ),
+        commitment.resolution
+      )
+    ) {
       return false;
     }
+  }
+
+  return true;
+}
+
+function matchesCommittedEnvelope(
+  committedRequest: PredictionRequest,
+  originalRequest: PredictionRequest,
+  commitment: NonNullable<NonNullable<PredictionRequest["privacy"]>["commitment"]>
+): boolean {
+  if (
+    committedRequest.requestId !== originalRequest.requestId ||
+    committedRequest.createdAt !== originalRequest.createdAt ||
+    committedRequest.prediction.domain !== originalRequest.prediction.domain ||
+    committedRequest.prediction.horizon !== originalRequest.prediction.horizon ||
+    committedRequest.prediction.desiredOutput !== originalRequest.prediction.desiredOutput
+  ) {
+    return false;
+  }
+
+  if (
+    canonicalizeJson(committedRequest.consumer) !== canonicalizeJson(originalRequest.consumer) ||
+    canonicalizeJson(committedRequest.constraints ?? null) !==
+      canonicalizeJson(originalRequest.constraints ?? null) ||
+    canonicalizeJson(committedRequest.payment ?? null) !== canonicalizeJson(originalRequest.payment ?? null)
+  ) {
+    return false;
+  }
+
+  if (committedRequest.prediction.question !== REDACTED_PLACEHOLDER) {
+    return false;
+  }
+
+  if (originalRequest.prediction.resolution) {
+    if (committedRequest.prediction.resolution !== REDACTED_PLACEHOLDER) {
+      return false;
+    }
+  } else if (committedRequest.prediction.resolution !== undefined) {
+    return false;
+  }
+
+  const committedContext = committedRequest.prediction.context ?? {};
+  const originalContext = originalRequest.prediction.context ?? {};
+  const preservedKeys = Object.keys(committedContext).sort(compareUtf16CodeUnits);
+  const expectedPreservedContext = selectPreservedContext(originalContext, preservedKeys);
+  if (canonicalizeJson(committedContext) !== canonicalizeJson(expectedPreservedContext)) {
+    return false;
+  }
+
+  const expectedRedactedKeys = listRedactedContextKeys(originalRequest.prediction.context, preservedKeys);
+  const actualRedactedKeys = [...(commitment.redactedKeys ?? [])].sort(compareUtf16CodeUnits);
+  if (canonicalizeJson(actualRedactedKeys) !== canonicalizeJson(expectedRedactedKeys)) {
+    return false;
   }
 
   return true;
@@ -138,8 +237,26 @@ function listRedactedContextKeys(
     .sort(compareUtf16CodeUnits);
 }
 
-function hashValue(value: unknown): string {
-  return createHash("sha256").update(canonicalizeJson(value)).digest("hex");
+function commitValue(secret: string, label: string, value: unknown): string {
+  return createHmac("sha256", secret)
+    .update(COMMITMENT_DOMAIN_SEPARATOR)
+    .update("\0")
+    .update(label)
+    .update("\0")
+    .update(canonicalizeJson(value))
+    .digest("hex");
+}
+
+function safeEqualHex(left: string, right: string): boolean {
+  if (left.length !== right.length || left.length % 2 !== 0 || !isHex(left) || !isHex(right)) {
+    return false;
+  }
+
+  return timingSafeEqual(Buffer.from(left, "hex"), Buffer.from(right, "hex"));
+}
+
+function isHex(value: string): boolean {
+  return /^[0-9a-f]+$/i.test(value);
 }
 
 function canonicalizeJson(value: unknown): string {

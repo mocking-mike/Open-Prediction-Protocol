@@ -101,7 +101,17 @@ predictions.request
 
 The `params` value MUST be a prediction request that validates against [prediction-request.schema.json](./prediction-request.schema.json).
 
+The JSON-RPC response `id` MUST equal the originating request `id`.
+
 On success, the JSON-RPC result MUST be a prediction response that validates against [prediction-response.schema.json](./prediction-response.schema.json).
+
+The prediction response `requestId` MUST equal the originating prediction request `requestId`.
+
+If the prediction response has `status = "completed"`, the returned forecast:
+
+- `domain` MUST equal `prediction.domain`
+- `horizon` MUST equal `prediction.horizon`
+- `type` MUST equal `prediction.desiredOutput`
 
 ### 5.2 Streaming Method
 
@@ -124,7 +134,21 @@ The stream MUST emit:
 - `lifecycle` events for non-terminal lifecycle updates
 - one terminal `result` event containing the final prediction response payload
 
+Each `lifecycle` event `requestId` MUST equal the originating prediction request `requestId`.
+
 The terminal `result` payload MUST validate against [prediction-response.schema.json](./prediction-response.schema.json).
+
+The terminal `result` payload `requestId` MUST equal the originating prediction request `requestId`.
+
+If the terminal `result` payload has `status = "completed"`, the returned forecast:
+
+- `domain` MUST equal `prediction.domain`
+- `horizon` MUST equal `prediction.horizon`
+- `type` MUST equal `prediction.desiredOutput`
+
+The stream MUST emit exactly one terminal `result` event.
+
+Providers MUST NOT emit additional events after the terminal `result`.
 
 Providers MUST NOT emit additional lifecycle states that violate [prediction-lifecycle.md](./prediction-lifecycle.md).
 
@@ -139,6 +163,8 @@ If the streaming client disconnects, providers SHOULD stop provider-side work pr
 ### 5.3 Error Behavior
 
 If a provider cannot accept or process a request, it SHOULD return a structured JSON-RPC error for request-level failures.
+
+If a `tasks/sendSubscribe` request fails before streaming begins, the provider SHOULD return a JSON-RPC error response instead of opening an event stream and then failing immediately.
 
 If execution begins and then fails within the prediction lifecycle, the provider SHOULD map that failure into the lifecycle model described in [prediction-lifecycle.md](./prediction-lifecycle.md).
 
@@ -157,6 +183,10 @@ Where present, trust and security metadata such as:
 MUST use the fields and constraints defined by the applicable schemas.
 
 Implementations MAY omit optional trust metadata unless a deployment policy requires it.
+
+When a provider advertises `AgentCard.identity`, any runtime `provider` identity metadata it emits in prediction responses or lifecycle events SHOULD describe the same provider identity.
+
+When a prediction response is signed, `provider.did` SHOULD identify the signer, and consumers that rely on signatures SHOULD compare that DID against discovered Agent Card identity metadata when it is available.
 
 ## 7. Payments
 

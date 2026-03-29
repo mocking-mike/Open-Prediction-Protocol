@@ -9,6 +9,21 @@ The format is intentionally simple during the draft phase:
 - notable additions
 - breaking changes when applicable
 
+## [Unreleased]
+
+In progress toward the next draft release.
+
+### Changed
+
+- replace `privacy.mode = "blinded"` with `privacy.mode = "committed"` and structured `privacy.commitment` metadata
+- switch the reference privacy helper from deterministic public hashes to per-request HMAC commitments with local reveal secrets
+- expand HTTP provider conformance and regression coverage for request binding, provider identity mismatches, malformed streams, and sanitized invalid-request errors
+- document runtime trust-path binding, stream-shape invariants, committed-privacy caveats, and default error-handling guidance across the protocol and implementer docs
+
+### Breaking
+
+- the canonical query-privacy helper is now `createCommittedPredictionRequest(...)`, which returns `{ request, reveal }` so callers can retain the local reveal secret needed for later verification
+
 ## [0.1.0] - 2026-03-29
 
 Initial public draft release.

@@ -66,21 +66,31 @@ export function formatValidationErrors(errors: ErrorObject[] | null | undefined)
   );
 }
 
+export class SchemaValidationError extends Error {
+  readonly details: string[];
+
+  constructor(details: string[]) {
+    super(details.join("; "));
+    this.name = "SchemaValidationError";
+    this.details = [...details];
+  }
+}
+
 export function assertValidAgentCard(value: unknown): asserts value is AgentCard {
   if (!validateAgentCard(value)) {
-    throw new Error(formatValidationErrors(validateAgentCard.errors).join("; "));
+    throw new SchemaValidationError(formatValidationErrors(validateAgentCard.errors));
   }
 }
 
 export function assertValidPredictionRequest(value: unknown): asserts value is PredictionRequest {
   if (!validatePredictionRequest(value)) {
-    throw new Error(formatValidationErrors(validatePredictionRequest.errors).join("; "));
+    throw new SchemaValidationError(formatValidationErrors(validatePredictionRequest.errors));
   }
 }
 
 export function assertValidPredictionResponse(value: unknown): asserts value is PredictionResponse {
   if (!validatePredictionResponse(value)) {
-    throw new Error(formatValidationErrors(validatePredictionResponse.errors).join("; "));
+    throw new SchemaValidationError(formatValidationErrors(validatePredictionResponse.errors));
   }
 }
 

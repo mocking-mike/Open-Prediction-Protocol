@@ -3,7 +3,12 @@ import { describe, expect, it } from "vitest";
 import { PredictionAgent } from "../src/agent/index.js";
 import { PredictionClient } from "../src/client/index.js";
 import { createDidKeyIdentity } from "../src/security/identity.js";
-import type { PredictionRequest, PredictionStreamEvent } from "../src/types/index.js";
+import type {
+  AgentCard,
+  CompletedPredictionResponse,
+  PredictionRequest,
+  PredictionStreamEvent
+} from "../src/types/index.js";
 
 function createRequest(): PredictionRequest {
   return {
@@ -18,6 +23,53 @@ function createRequest(): PredictionRequest {
       horizon: "24h",
       desiredOutput: "binary-probability"
     }
+  };
+}
+
+function createAgentCard(overrides: Partial<AgentCard> = {}): AgentCard {
+  return {
+    protocolVersion: "0.1.0",
+    name: "provider-1-card",
+    url: "https://provider.example.com",
+    identity: {
+      id: "provider-1"
+    },
+    capabilities: {
+      predictions: [
+        {
+          id: "weather.precipitation.daily",
+          domain: "weather.precipitation",
+          title: "Daily precipitation probability",
+          output: {
+            type: "binary-probability"
+          },
+          horizons: ["24h"]
+        }
+      ]
+    },
+    ...overrides
+  };
+}
+
+function createCompletedResponse(
+  overrides: Partial<CompletedPredictionResponse> = {}
+): CompletedPredictionResponse {
+  return {
+    responseId: "resp-1",
+    requestId: "req-1",
+    status: "completed",
+    createdAt: "2026-03-28T12:01:00Z",
+    provider: {
+      id: "provider-1"
+    },
+    forecast: {
+      type: "binary-probability",
+      domain: "weather.precipitation",
+      horizon: "24h",
+      generatedAt: "2026-03-28T12:01:00Z",
+      probability: 0.7
+    },
+    ...overrides
   };
 }
 
@@ -52,9 +104,24 @@ describe("PredictionAgent and PredictionClient", () => {
   });
 
   it("returns a failed response when the handler throws", async () => {
+    const reported: {
+      category?: string;
+      publicMessage?: string;
+      requestId?: string | undefined;
+      providerId?: string | undefined;
+      rawMessage?: string | undefined;
+    } = {};
+
     const agent = new PredictionAgent({
       provider: {
         id: "provider-1"
+      },
+      errorReporter: (event) => {
+        reported.category = event.category;
+        reported.publicMessage = event.publicMessage;
+        reported.requestId = event.requestId;
+        reported.providerId = event.providerId;
+        reported.rawMessage = event.error instanceof Error ? event.error.message : String(event.error);
       },
       handler: async () => {
         throw new Error("upstream provider unavailable");
@@ -68,6 +135,33 @@ describe("PredictionAgent and PredictionClient", () => {
       throw new Error("Expected failed response");
     }
     expect(response.error.code).toBe("prediction_failed");
+    expect(response.error.message).toBe("Prediction request failed");
+    expect(reported).toMatchObject({
+      category: "handler",
+      publicMessage: "Prediction request failed",
+      requestId: "req-1",
+      providerId: "provider-1",
+      rawMessage: "upstream provider unavailable"
+    });
+  });
+
+  it("can expose detailed handler errors when configured", async () => {
+    const agent = new PredictionAgent({
+      provider: {
+        id: "provider-1"
+      },
+      exposeErrorDetails: true,
+      handler: async () => {
+        throw new Error("upstream provider unavailable");
+      }
+    });
+
+    const response = await agent.handleRequest(createRequest());
+
+    expect(response.status).toBe("failed");
+    if (response.status !== "failed") {
+      throw new Error("Expected failed response");
+    }
     expect(response.error.message).toContain("upstream provider unavailable");
   });
 
@@ -82,6 +176,57 @@ describe("PredictionAgent and PredictionClient", () => {
         })
       })
     ).rejects.toThrow();
+  });
+
+  it("rejects responses whose requestId does not match the active request", async () => {
+    const client = new PredictionClient();
+
+    await expect(
+      client.request(createRequest(), {
+        send: async () =>
+          createCompletedResponse({
+            requestId: "req-2"
+          })
+      })
+    ).rejects.toThrow("requestId does not match request");
+  });
+
+  it("rejects completed responses whose forecast metadata does not match the request", async () => {
+    const client = new PredictionClient();
+
+    await expect(
+      client.request(createRequest(), {
+        send: async () =>
+          createCompletedResponse({
+            forecast: {
+              type: "binary-probability",
+              domain: "weather.precipitation",
+              horizon: "48h",
+              generatedAt: "2026-03-28T12:01:00Z",
+              probability: 0.7
+            }
+          })
+      })
+    ).rejects.toThrow("forecast horizon does not match request");
+  });
+
+  it("rejects provider identity mismatches when the expected Agent Card is known", async () => {
+    const client = new PredictionClient();
+
+    await expect(
+      client.request(
+        createRequest(),
+        {
+          send: async () =>
+            createCompletedResponse({
+              provider: {
+                id: "provider-2"
+              }
+            })
+        },
+        createAgentCard()
+      )
+    ).rejects.toThrow("provider id does not match Agent Card identity");
   });
 
   it("optionally verifies signed responses on the client", async () => {
