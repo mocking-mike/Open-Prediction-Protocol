@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openpredictionprotocol.org/schemas/prediction-request.schema.json",
+  "title": "OPP Prediction Request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["requestId", "createdAt", "consumer", "prediction"],
+  "properties": {
+    "requestId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "consumer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "did": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "prediction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["domain", "question", "horizon", "desiredOutput"],
+      "properties": {
+        "domain": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(?:\\.[a-z0-9]+)+$"
+        },
+        "question": {
+          "type": "string",
+          "minLength": 1
+        },
+        "horizon": {
+          "type": "string",
+          "minLength": 1
+        },
+        "desiredOutput": {
+          "type": "string",
+          "enum": [
+            "binary-probability",
+            "categorical-distribution",
+            "numeric-range"
+          ]
+        },
+        "resolution": {
+          "type": "string",
+          "minLength": 1
+        },
+        "context": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "constraints": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "maxLatencyMs": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "maxPrice": {
+          "type": "number",
+          "minimum": 0
+        },
+        "minVerificationStatus": {
+          "type": "string",
+          "enum": ["self-reported", "provisional", "verified"]
+        },
+        "compliance": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "humanOversightRequired": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    },
+    "privacy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["plain", "blinded"]
+        }
+      }
+    },
+    "payment": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "preferredMethod": {
+          "type": "string",
+          "enum": ["free", "x402", "stripe", "custom"]
+        }
+      }
+    }
+  }
+}

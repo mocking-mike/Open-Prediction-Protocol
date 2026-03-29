@@ -1,0 +1,49 @@
+{
+  "name": "open-prediction-protocol",
+  "version": "0.1.0",
+  "description": "Open protocol for AI agents to discover prediction providers, request forecasts, compare trust signals, and pay — all through a single standard.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "test:watch": "vitest --passWithNoTests",
+    "example:weather": "tsx examples/weather-proxy.ts",
+    "example:crypto": "tsx examples/crypto-proxy.ts",
+    "example:sports": "tsx examples/sports-proxy.ts",
+    "example:signed-paid": "tsx examples/signed-paid-weather-proxy.ts",
+    "example:aggregation": "tsx examples/aggregation-demo.ts",
+    "integration": "tsx examples/integration-test.ts"
+  },
+  "keywords": [
+    "predictions",
+    "forecasting",
+    "ai-agents",
+    "open-protocol",
+    "probabilistic",
+    "trust",
+    "agentic",
+    "mcp",
+    "a2a"
+  ],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.18.2",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.28.0",
+    "@x402/express": "^2.8.0",
+    "@x402/fetch": "^2.8.0",
+    "ajv": "^8.17.1",
+    "bs58": "^6.0.0",
+    "express": "^5.1.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.5",
+    "@types/node": "^25.5.0",
+    "tsup": "^8.5.1",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.2"
+  }
+}
