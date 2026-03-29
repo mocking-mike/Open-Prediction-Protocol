@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   PredictionLedger,
@@ -94,49 +94,56 @@ describe("scoring ledger", () => {
   });
 
   it("produces stable entry hashes for equivalent payloads with different property order", () => {
-    const firstLedger = new PredictionLedger();
-    const secondLedger = new PredictionLedger();
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-29T10:05:00Z"));
 
-    const firstRequest: PredictionRequest = {
-      requestId: "req-ordered-1",
-      createdAt: "2026-03-29T10:00:00Z",
-      consumer: {
-        id: "consumer-1"
-      },
-      prediction: {
-        domain: "weather.precipitation",
-        question: "Will it rain tomorrow in Warsaw?",
-        horizon: "24h",
-        desiredOutput: "binary-probability",
-        context: {
-          thresholdMm: 10,
-          city: "Warsaw"
+    try {
+      const firstLedger = new PredictionLedger();
+      const secondLedger = new PredictionLedger();
+
+      const firstRequest: PredictionRequest = {
+        requestId: "req-ordered-1",
+        createdAt: "2026-03-29T10:00:00Z",
+        consumer: {
+          id: "consumer-1"
+        },
+        prediction: {
+          domain: "weather.precipitation",
+          question: "Will it rain tomorrow in Warsaw?",
+          horizon: "24h",
+          desiredOutput: "binary-probability",
+          context: {
+            thresholdMm: 10,
+            city: "Warsaw"
+          }
         }
-      }
-    };
+      };
 
-    const secondRequest: PredictionRequest = {
-      createdAt: "2026-03-29T10:00:00Z",
-      requestId: "req-ordered-1",
-      prediction: {
-        question: "Will it rain tomorrow in Warsaw?",
-        desiredOutput: "binary-probability",
-        horizon: "24h",
-        domain: "weather.precipitation",
-        context: {
-          city: "Warsaw",
-          thresholdMm: 10
+      const secondRequest: PredictionRequest = {
+        createdAt: "2026-03-29T10:00:00Z",
+        requestId: "req-ordered-1",
+        prediction: {
+          question: "Will it rain tomorrow in Warsaw?",
+          desiredOutput: "binary-probability",
+          horizon: "24h",
+          domain: "weather.precipitation",
+          context: {
+            city: "Warsaw",
+            thresholdMm: 10
+          }
+        },
+        consumer: {
+          id: "consumer-1"
         }
-      },
-      consumer: {
-        id: "consumer-1"
-      }
-    };
+      };
 
-    const firstEntry = firstLedger.appendRequest(firstRequest);
-    const secondEntry = secondLedger.appendRequest(secondRequest);
+      const firstEntry = firstLedger.appendRequest(firstRequest);
+      const secondEntry = secondLedger.appendRequest(secondRequest);
 
-    expect(firstEntry.entryHash).toBe(secondEntry.entryHash);
+      expect(firstEntry.entryHash).toBe(secondEntry.entryHash);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
