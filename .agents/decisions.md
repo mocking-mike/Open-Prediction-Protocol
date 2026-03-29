@@ -190,6 +190,188 @@ A chronological record of architectural and technical decisions made during the 
 - **Why:** This creates a stable protocol-level tracing surface now while keeping future OpenTelemetry integration open and avoiding premature dependency complexity.
 - **Alternatives rejected:** Pulling in full OpenTelemetry instrumentation immediately, Deferring all tracing until later M4 tasks
 
+### DEC-029 — M4 logging starts with a lightweight structured logger and correlation IDs
+- **Date:** 2026-03-29
+- **Status:** accepted
+- **Choice:** Implement structured logging as a dependency-free logger abstraction with pluggable sinks, child-context support, and generated correlation IDs, rather than adopting a specific logging backend immediately.
+- **Why:** This gives the protocol a reusable structured logging surface now while preserving flexibility for later sink and transport integrations.
+- **Alternatives rejected:** Binding the SDK to one logging library, Deferring structured logging until after broader observability work
+
+### DEC-030 — M4 golden-task monitoring starts as evaluation helpers over resolved binary responses
+- **Date:** 2026-03-29
+- **Status:** accepted
+- **Choice:** Implement golden-task monitoring as a lightweight observability module that evaluates completed binary responses against known-answer task definitions, updates calibration through the existing resolution flow, and summarizes recent evaluation outcomes.
+- **Why:** This adds operational trust checks now without coupling M4 to a scheduler, persistent monitor state, or broader verification infrastructure that belongs in later milestones.
+- **Alternatives rejected:** Building a full golden-task runner and scheduler immediately, Embedding known-answer checks ad hoc inside examples or external ops code
+
+### DEC-031 — M4 confidence monitoring summarizes evaluation history and emits threshold-based signals
+- **Date:** 2026-03-29
+- **Status:** accepted
+- **Choice:** Implement confidence monitoring as a dependency-free snapshot-and-signals module over golden-task evaluation history, using explicit thresholds for confidence-gap and score-drift warnings rather than background monitoring infrastructure.
+- **Why:** This gives the protocol a concrete degradation-detection surface now while preserving flexibility for later schedulers, persistence, and policy enforcement.
+- **Alternatives rejected:** Building a full monitoring service inside the SDK, Deferring all drift detection until circuit breakers or external ops tooling
+
+### DEC-032 — M4 circuit breakers start as a pure provider-routing policy over monitor status
+- **Date:** 2026-03-29
+- **Status:** accepted
+- **Choice:** Implement circuit-breaking as a dependency-free policy module that consumes confidence-monitor status and returns explicit `allow`, `fallback`, or `reject` decisions, without wiring it directly into transport or client selection logic yet.
+- **Why:** This delivers the safety decision surface now while keeping integration strategy open for later routing layers and production policies.
+- **Alternatives rejected:** Embedding breaker logic directly inside transports or aggregators immediately, Deferring provider degradation handling until after packaging
+
+### DEC-033 — Packaging uses tsup dual-format builds with bundled canonical schemas
+- **Date:** 2026-03-29
+- **Status:** accepted
+- **Choice:** Package the SDK with `tsup` from `src/index.ts`, emit both ESM and CJS entry points plus declarations, and import the canonical JSON schemas directly so validation works from bundled artifacts without runtime filesystem path assumptions.
+- **Why:** This makes the package portable across build targets and avoids CJS/`import.meta` breakage in the schema validator layer.
+- **Alternatives rejected:** Publishing source-only TypeScript, Keeping filesystem-based schema loading inside bundled output, Shipping only one module format
+
+### DEC-034 — Independent scorers use a dedicated Agent Card schema with scoring capabilities
+- **Date:** 2026-03-29
+- **Status:** accepted
+- **Choice:** Model independent scorers with a dedicated `scorer-agent-card` schema that preserves the core OPP identity, pricing, and compliance structure while replacing provider prediction capabilities with scorer-specific capability declarations for domains, forecast types, score types, and verification modes.
+- **Why:** This keeps scorer discovery compatible with the broader OPP trust model without overloading provider prediction capabilities or inventing a separate identity and metadata format.
+- **Alternatives rejected:** Reusing provider `agent-card` unchanged for scorers, Deferring scorer-role schema design until ledger or consensus code exists
+
+### DEC-035 — Scoring ledger starts as an in-memory append-only hash chain
+- **Date:** 2026-03-29
+- **Status:** accepted
+- **Choice:** Implement the first prediction ledger as an append-only in-memory sequence of request, response, and resolution records with chained hashes and integrity verification, rather than introducing persistence or distributed coordination immediately.
+- **Why:** This establishes an auditable scoring foundation now while keeping storage, replication, and consensus concerns separate for later milestones.
+- **Alternatives rejected:** Deferring all ledger work until persistent storage is designed, Building a database-backed or networked ledger inside the SDK immediately
+
+### DEC-036 — Consensus starts as pluggable binary outcome aggregation over scorer submissions
+- **Date:** 2026-03-29
+- **Status:** accepted
+- **Choice:** Implement consensus as a lightweight helper that resolves one binary outcome from multiple scorer submissions using explicit `majority` and `weighted` strategies, with strict target-matching and duplicate-scorer rejection.
+- **Why:** This provides the first stronger verification path now while keeping non-binary consensus, persistence, and network coordination outside the initial M5 surface.
+- **Alternatives rejected:** Hard-coding one voting strategy, Coupling consensus directly into the ledger or observability modules, Deferring all consensus logic until a full scorer service exists
+
+### DEC-037 — Query privacy starts with deterministic request blinding and reveal verification
+- **Date:** 2026-03-29
+- **Status:** accepted
+- **Choice:** Implement privacy-sensitive request support as deterministic blinding helpers that redact sensitive request fields, preserve selected public context keys, and attach stable hash commitments so later reveal workflows can verify the original content without changing the base request schema.
+- **Why:** This adds a practical privacy hook now while avoiding premature cryptographic protocol complexity or schema churn.
+- **Alternatives rejected:** Deferring all query privacy until a heavier cryptographic design exists, Adding a separate blinded-request schema immediately, Encrypting request content inside the SDK without a larger key-management design
+
+### DEC-038 — Anomaly detection starts as threshold-based security signals over OPP-visible metadata
+- **Date:** 2026-03-29
+- **Status:** accepted
+- **Choice:** Implement prediction anomaly detection as a lightweight signal layer over consensus agreement, freshness metadata, recipient binding, and confidence-monitor degradation rather than attempting broader behavioral or model-level abuse detection immediately.
+- **Why:** This gives OPP a practical first abuse-detection surface using protocol-visible evidence while keeping heavier threat modeling and statistical defenses for later evolution.
+- **Alternatives rejected:** Deferring anomaly detection entirely, Building a full provider-behavior anomaly system inside the SDK immediately, Coupling anomaly detection directly into circuit breakers without a reusable signal layer
+
+### DEC-039 — Stripe support uses the existing payment-provider abstraction, not direct SDK integration
+- **Date:** 2026-03-29
+- **Status:** accepted
+- **Choice:** Implement `StripePaymentProvider` as a lightweight adapter over the existing `PaymentProvider` interface that delegates authorization to provider-controlled Stripe workflow code, rather than embedding live Stripe SDK operations into OPP itself.
+- **Why:** This gives OPP protocol-level Stripe compatibility while keeping real account configuration, checkout/session orchestration, and webhook handling on the provider side where they belong.
+- **Alternatives rejected:** Embedding direct Stripe API integration into the SDK, Deferring Stripe compatibility entirely until a larger billing subsystem exists
+
+### DEC-040 — Compliance filtering starts as consumer-side checks over declared Agent Card metadata
+- **Date:** 2026-03-29
+- **Status:** accepted
+- **Choice:** Implement compliance filtering as a lightweight consumer-side helper that evaluates provider-declared `riskLevel` and `humanOversight` metadata against request requirements and deployment policy thresholds, without attempting legal rule encoding or provider enforcement logic.
+- **Why:** This gives deployments a practical policy-screening surface now while keeping compliance responsibility correctly outside the protocol library.
+- **Alternatives rejected:** Deferring compliance filtering until broader audit tooling exists, Embedding hard-coded regulatory rules into OPP, Enforcing compliance checks only inside transport or server layers
+
+### DEC-041 — Compliance audit logging starts as structured in-memory event capture
+- **Date:** 2026-03-29
+- **Status:** accepted
+- **Choice:** Implement compliance audit logging as a lightweight in-memory event log with stable fields, query helpers, and summary views rather than introducing persistence, retention policy, or external reporting integrations immediately.
+- **Why:** This establishes a usable audit-trail surface now while keeping storage and operational governance concerns separate from the SDK core.
+- **Alternatives rejected:** Deferring audit logging until later compliance work, Reusing the general observability logger as the only audit surface, Building a persistent audit store inside the SDK immediately
+
+### DEC-042 — Oversight starts as local review, override, and stop state helpers
+- **Date:** 2026-03-29
+- **Status:** accepted
+- **Choice:** Implement human-oversight hooks as a lightweight local controller that evaluates when review is required and records `allowed`, `requires-review`, `overridden`, and `stopped` decisions, rather than building transport-level stop endpoints or workflow orchestration immediately.
+- **Why:** This gives OPP a usable oversight decision surface now while keeping endpoint wiring and operational workflow integration open for later deployments.
+- **Alternatives rejected:** Deferring all oversight support until a server control plane exists, Embedding oversight state directly into the agent runtime without a reusable helper
+
+### DEC-043 — Compliance profiles are documented as deployment guidance over existing protocol controls
+- **Date:** 2026-03-29
+- **Status:** accepted
+- **Choice:** Document selected regulated-domain compliance profiles as deployment guidance mapped onto existing OPP controls such as `riskLevel`, `humanOversightRequired`, audit logging, oversight decisions, anomaly detection, and consensus, rather than introducing new compliance schema fields.
+- **Why:** This gives adopters concrete policy guidance now while keeping the protocol surface stable and avoiding premature jurisdiction-specific modeling.
+- **Alternatives rejected:** Deferring compliance guidance until later, Adding new protocol fields for each profile, Encoding legal requirements directly into the SDK
+
+### DEC-044 — Conditional triggers start as client-side subscriptions over completed binary forecasts
+- **Date:** 2026-03-29
+- **Status:** accepted
+- **Choice:** Implement conditional trigger subscriptions as a lightweight client-side registry that watches completed binary forecast responses and materializes follow-up `PredictionRequest`s when configured probability thresholds are crossed.
+- **Why:** This delivers the first advanced composition primitive now without introducing a persistent subscription service or changing the base request/response protocol.
+- **Alternatives rejected:** Deferring conditional composition entirely, Building a server-side subscription runtime immediately, Expanding the core protocol schema before the first reference behavior exists
+
+### DEC-045 — Agent scaffolding starts as a minimal package generator with static templates
+- **Date:** 2026-03-29
+- **Status:** accepted
+- **Choice:** Implement `packages/create-opp-agent/` as a small CLI and library that generates a starter OPP agent package from static templates, instead of building an interactive template engine or framework-specific scaffolder.
+- **Why:** This gives adopters a fast, testable bootstrap path now while keeping the scaffolding surface easy to maintain and aligned with the reference SDK.
+- **Alternatives rejected:** Deferring scaffolding entirely, Building a larger interactive generator immediately, Generating multiple framework variants before the first package exists
+
+### DEC-046 — Public launch starts with draft-stability policy and publishable package boundaries
+- **Date:** 2026-03-29
+- **Status:** accepted
+- **Choice:** Prepare the first public launch by making the root SDK and `create-opp-agent` scaffold package buildable as publishable packages, and add explicit draft-stability, contribution, conduct, and security documentation before broader standardization work.
+- **Why:** This makes the repository credible as a public draft protocol project now without pretending that governance, conformance, and interoperability proof are already complete.
+- **Alternatives rejected:** Keeping packages private until all launch checklist items are complete, Publishing code without explicit draft-stability or contribution expectations, Treating launch readiness as only a code-quality question
+
+### DEC-047 — Public protocol guidance is split into normative spec and informative whitepaper
+- **Date:** 2026-03-29
+- **Status:** accepted
+- **Choice:** Add a dedicated normative protocol document in `spec/protocol.md` that defines the interoperable HTTP, JSON-RPC, schema, and lifecycle contract, while leaving `whitepaper.md` as explanatory and non-normative.
+- **Why:** Independent implementers need a concise contract document that is easier to follow than a vision-oriented whitepaper and less fragmented than reading only schemas and examples.
+- **Alternatives rejected:** Treating the whitepaper as partially normative, Leaving the protocol contract scattered across schemas and README sections, Deferring normative consolidation until after public launch
+
+### DEC-048 — Conformance starts as a black-box HTTP provider runner over the minimal surface
+- **Date:** 2026-03-29
+- **Status:** accepted
+- **Choice:** Implement the first conformance suite as a reusable black-box runner that validates the minimal HTTP provider surface against the normative OPP schemas, JSON-RPC methods, and SSE lifecycle behavior.
+- **Why:** This gives independent implementations a concrete interoperability target now without coupling conformance to internal unit tests or requiring the full reference SDK runtime.
+- **Alternatives rejected:** Treating the existing repo test suite as sufficient conformance, Deferring conformance until multiple external implementations exist, Expanding first-pass conformance to every optional subsystem immediately
+
+### DEC-049 — Payment authorization is request-bound and signature verification is strict about declared algorithms
+- **Date:** 2026-03-29
+- **Status:** accepted
+- **Choice:** Bind paid authorization hooks to the full prediction request, including provider-specific `payment.authorization` context, and reject unsupported `signature.alg` values before verifying signed responses.
+- **Why:** Public launch should not present paid rails or signed envelopes as trustworthy if authorization is detached from request proof or if verification silently ignores declared algorithm metadata.
+- **Alternatives rejected:** Leaving payment authorization option-only, Treating payment proof handling as purely out-of-band, Ignoring `signature.alg` and trusting the DID key path alone
+
+### DEC-050 — Independent implementers get provider and consumer guides separate from the SDK
+- **Date:** 2026-03-29
+- **Status:** accepted
+- **Choice:** Add dedicated provider and consumer implementation guides in `spec/` that explain how to speak OPP over the normative wire contract without depending on the reference SDK.
+- **Why:** A protocol cannot credibly aim for standard adoption if the only practical path is to read SDK internals or copy example code.
+- **Alternatives rejected:** Leaving implementation guidance implicit in the README and examples, Deferring implementer docs until external adopters ask for them, Expanding the whitepaper instead of adding practical guides
+
+### DEC-051 — Draft-phase governance is explicit, lightweight, and tied to normative documents
+- **Date:** 2026-03-29
+- **Status:** accepted
+- **Choice:** Define a lightweight governance model in `GOVERNANCE.md` that distinguishes editorial, implementation, and protocol changes, requires explicit maintainer approval for protocol-affecting changes, and treats the normative spec, schemas, versioning policy, and decisions log as the current source of truth.
+- **Why:** Public draft protocols need an explicit change path and source-of-truth hierarchy before they can credibly ask other teams to build against them.
+- **Alternatives rejected:** Leaving governance implicit in maintainer discretion alone, Deferring governance until after independent interoperability exists, Pretending the project already has a formal standards body
+
+### DEC-052 — Draft releases require changelog entries, package packing, and CI verification
+- **Date:** 2026-03-29
+- **Status:** accepted
+- **Choice:** Add a draft-phase release process with `CHANGELOG.md`, `RELEASE.md`, package-packing automation, and a CI workflow that runs release verification and package artifact creation on public branches.
+- **Why:** Public protocol projects need a repeatable release path and inspectable package outputs before outside adopters can trust versioned releases.
+- **Alternatives rejected:** Relying on ad hoc manual publish steps, Deferring changelog discipline until after `1.0.0`, Treating build success alone as sufficient release automation
+
+### DEC-053 — Streaming cancellation is propagated through handler abort signals
+- **Date:** 2026-03-29
+- **Status:** accepted
+- **Choice:** Implement abort-aware SSE cancellation by propagating an `AbortSignal` from the HTTP streaming connection into `PredictionAgent.streamRequest(...)`, `PredictionAgent.handleRequest(...)`, and the provider handler itself, and stop streaming silently on external cancellation instead of emitting a failed terminal response.
+- **Why:** Client disconnects should stop provider-side work promptly, and external cancellation should not be reported as an application-level prediction failure.
+- **Alternatives rejected:** Aborting only the socket without changing handler APIs, Converting disconnects into failed prediction responses, Leaving streaming cancellation as an operational note only
+
+### DEC-054 — First interoperability proof targets a standalone provider outside the SDK runtime
+- **Date:** 2026-03-29
+- **Status:** accepted
+- **Choice:** Demonstrate initial interoperability by validating the conformance runner against a standalone HTTP provider implementation that does not use `PredictionAgent` or `PredictionHttpServer`, while keeping it in the same repository for repeatable verification.
+- **Why:** This proves that OPP compatibility is not limited to the reference runtime and gives the project a practical bridge toward future external implementations.
+- **Alternatives rejected:** Treating the reference SDK server as sufficient interoperability proof, Waiting for a separate external repository before documenting any proof, Building a second implementation that still reuses the core runtime paths
+
 ### DEC-027 — Review findings must be fixed or explicitly roadmap-tracked
 - **Date:** 2026-03-29
 - **Status:** accepted

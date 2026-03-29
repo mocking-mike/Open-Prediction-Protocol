@@ -4,6 +4,7 @@ import { PredictionAgent } from "../src/agent/index.js";
 import {
   FreePaymentProvider,
   PaymentNegotiator,
+  StripePaymentProvider,
   X402PaymentProvider,
   findPricingOption,
   negotiatePayment
@@ -29,14 +30,26 @@ function createRequest(preferredMethod: "free" | "x402" = "free") {
   };
 }
 
+function createStripeRequest() {
+  return {
+    ...createRequest("free"),
+    payment: {
+      preferredMethod: "stripe" as const
+    }
+  };
+}
+
 describe("payments", () => {
   it("authorizes free pricing through FreePaymentProvider", () => {
     const provider = new FreePaymentProvider();
 
     expect(
       provider.authorize({
-        method: "free",
-        model: "free"
+        option: {
+          method: "free",
+          model: "free"
+        },
+        request: createRequest("free")
       })
     ).toEqual({
       method: "free",
@@ -66,8 +79,8 @@ describe("payments", () => {
       [
         new FreePaymentProvider(),
         new X402PaymentProvider({
-          authorize: () => ({
-            method: "x402",
+          authorize: ({ option }) => ({
+            method: option.method,
             authorized: true
           })
         })
@@ -88,8 +101,8 @@ describe("payments", () => {
       paymentProviders: [
         new FreePaymentProvider(),
         new X402PaymentProvider({
-          authorize: () => ({
-            method: "x402",
+          authorize: ({ option }) => ({
+            method: option.method,
             authorized: true
           })
         })
@@ -103,29 +116,90 @@ describe("payments", () => {
 
   it("delegates x402 authorization through the configured provider", async () => {
     const provider = new X402PaymentProvider({
-      authorize: async (option) => ({
+      authorize: async ({ option, request }) => ({
         method: option.method,
         authorized: true,
         metadata: {
           amount: option.amount,
-          currency: option.currency
+          currency: option.currency,
+          authorization: request.payment?.authorization
         }
       })
     });
 
     await expect(
       provider.authorize({
-        method: "x402",
-        model: "per-request",
-        amount: 0.01,
-        currency: "USDC"
+        option: {
+          method: "x402",
+          model: "per-request",
+          amount: 0.01,
+          currency: "USDC"
+        },
+        request: {
+          ...createRequest("x402"),
+          payment: {
+            preferredMethod: "x402",
+            authorization: {
+              paymentHeader: "x402-proof"
+            }
+          }
+        }
       })
     ).resolves.toEqual({
       method: "x402",
       authorized: true,
       metadata: {
         amount: 0.01,
-        currency: "USDC"
+        currency: "USDC",
+        authorization: {
+          paymentHeader: "x402-proof"
+        }
+      }
+    });
+  });
+
+  it("delegates stripe authorization through the configured provider", async () => {
+    const provider = new StripePaymentProvider({
+      authorize: async ({ option, request }) => ({
+        method: option.method,
+        authorized: true,
+        metadata: {
+          amount: option.amount,
+          currency: option.currency,
+          checkoutSessionId: "cs_test_123",
+          authorization: request.payment?.authorization
+        }
+      })
+    });
+
+    await expect(
+      provider.authorize({
+        option: {
+          method: "stripe",
+          model: "per-request",
+          amount: 1.99,
+          currency: "USD"
+        },
+        request: {
+          ...createStripeRequest(),
+          payment: {
+            preferredMethod: "stripe",
+            authorization: {
+              checkoutSessionId: "cs_test_123"
+            }
+          }
+        }
+      })
+    ).resolves.toEqual({
+      method: "stripe",
+      authorized: true,
+      metadata: {
+        amount: 1.99,
+        currency: "USD",
+        checkoutSessionId: "cs_test_123",
+        authorization: {
+          checkoutSessionId: "cs_test_123"
+        }
       }
     });
   });
@@ -194,9 +268,92 @@ describe("payments", () => {
       },
       paymentProviders: [
         new X402PaymentProvider({
-          authorize: async () => ({
+          authorize: async ({ request }) => ({
             method: "x402",
-            authorized: true
+            authorized: request.payment?.authorization?.["paymentHeader"] === "x402-proof"
+          })
+        })
+      ],
+      handler: async () => ({
+        forecast: {
+          type: "binary-probability",
+          domain: "weather.precipitation",
+          horizon: "24h",
+          generatedAt: "2026-03-28T12:01:00Z",
+          probability: 0.5
+        }
+      })
+    });
+
+    const response = await agent.handleRequest({
+      ...createRequest("x402"),
+      payment: {
+        preferredMethod: "x402",
+        authorization: {
+          paymentHeader: "x402-proof"
+        }
+      }
+    });
+    expect(response.status).toBe("completed");
+  });
+
+  it("lets PredictionAgent use negotiated stripe authorization when configured", async () => {
+    const agent = new PredictionAgent({
+      provider: {
+        id: "provider-1"
+      },
+      pricing: {
+        options: [
+          { method: "stripe", model: "per-request", amount: 1.99, currency: "USD" }
+        ]
+      },
+      paymentProviders: [
+        new StripePaymentProvider({
+          authorize: async ({ request }) => ({
+            method: "stripe",
+            authorized: request.payment?.authorization?.["checkoutSessionId"] === "cs_test_123",
+            metadata: {
+              checkoutSessionId: "cs_test_123"
+            }
+          })
+        })
+      ],
+      handler: async () => ({
+        forecast: {
+          type: "binary-probability",
+          domain: "weather.precipitation",
+          horizon: "24h",
+          generatedAt: "2026-03-28T12:01:00Z",
+          probability: 0.5
+        }
+      })
+    });
+
+    const response = await agent.handleRequest({
+      ...createStripeRequest(),
+      payment: {
+        preferredMethod: "stripe",
+        authorization: {
+          checkoutSessionId: "cs_test_123"
+        }
+      }
+    });
+    expect(response.status).toBe("completed");
+  });
+
+  it("returns a failed response when payment proof is missing for a paid method", async () => {
+    const agent = new PredictionAgent({
+      provider: {
+        id: "provider-1"
+      },
+      pricing: {
+        options: [{ method: "x402", model: "per-request", amount: 0.01, currency: "USDC" }]
+      },
+      paymentProviders: [
+        new X402PaymentProvider({
+          authorize: async ({ request }) => ({
+            method: "x402",
+            authorized: request.payment?.authorization?.["paymentHeader"] === "x402-proof"
           })
         })
       ],
@@ -212,6 +369,10 @@ describe("payments", () => {
     });
 
     const response = await agent.handleRequest(createRequest("x402"));
-    expect(response.status).toBe("completed");
+    expect(response.status).toBe("failed");
+    if (response.status !== "failed") {
+      throw new Error("Expected failed response");
+    }
+    expect(response.error.message).toContain("Payment authorization failed");
   });
 });

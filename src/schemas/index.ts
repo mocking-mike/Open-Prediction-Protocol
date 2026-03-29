@@ -1,22 +1,16 @@
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-
 import Ajv2020 from "ajv/dist/2020.js";
 import type { ErrorObject, ValidateFunction } from "ajv";
 
 import type { AgentCard, PredictionRequest, PredictionResponse } from "../types/index.js";
+import agentCardSchema from "../../spec/agent-card.schema.json" with { type: "json" };
+import predictionRequestSchema from "../../spec/prediction-request.schema.json" with { type: "json" };
+import predictionResponseSchema from "../../spec/prediction-response.schema.json" with { type: "json" };
 
 type AjvLike = {
   addFormat: (name: string, validator: { validate: (value: string) => boolean }) => AjvLike;
   compile: <T>(schema: object) => ValidateFunction<T>;
 };
 type AjvCtor = new (options: Record<string, unknown>) => AjvLike;
-
-function readSchema(relativePath: string): object {
-  const schemaUrl = new URL(relativePath, import.meta.url);
-  const contents = readFileSync(fileURLToPath(schemaUrl), "utf8");
-  return JSON.parse(contents) as object;
-}
 
 const Ajv2020Ctor = Ajv2020 as unknown as AjvCtor;
 const ajv = new Ajv2020Ctor({
@@ -55,10 +49,6 @@ ajv.addFormat("uri", {
     }
   }
 });
-
-const agentCardSchema = readSchema("../../spec/agent-card.schema.json");
-const predictionRequestSchema = readSchema("../../spec/prediction-request.schema.json");
-const predictionResponseSchema = readSchema("../../spec/prediction-response.schema.json");
 
 function compileValidator<T>(schema: object): ValidateFunction<T> {
   return ajv.compile<T>(schema);

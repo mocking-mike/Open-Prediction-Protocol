@@ -131,6 +131,65 @@ describe("agent-card schema", () => {
   });
 });
 
+describe("scorer-agent-card schema", () => {
+  it("accepts a minimal valid scorer card", async () => {
+    const result = await validateSchema("scorer-agent-card.schema.json", {
+      protocolVersion: "0.1.0",
+      name: "weather-scorer",
+      url: "https://scorer.example.com",
+      capabilities: {
+        scoring: [
+          {
+            id: "weather.precipitation.scoring",
+            domain: "weather.precipitation",
+            title: "Weather precipitation scoring",
+            forecastTypes: ["binary-probability"],
+            scoreTypes: ["brier", "log"],
+            verificationModes: ["outcome-resolution"]
+          }
+        ]
+      }
+    });
+
+    expect(result.valid, result.errors.join("\n")).toBe(true);
+  });
+
+  it("rejects a scorer card without scoring capabilities", async () => {
+    const result = await validateSchema("scorer-agent-card.schema.json", {
+      protocolVersion: "0.1.0",
+      name: "broken-scorer",
+      url: "https://scorer.example.com",
+      capabilities: {
+        scoring: []
+      }
+    });
+
+    expect(result.valid).toBe(false);
+  });
+
+  it("rejects a scorer card with an invalid verification mode", async () => {
+    const result = await validateSchema("scorer-agent-card.schema.json", {
+      protocolVersion: "0.1.0",
+      name: "broken-scorer",
+      url: "https://scorer.example.com",
+      capabilities: {
+        scoring: [
+          {
+            id: "weather.precipitation.scoring",
+            domain: "weather.precipitation",
+            title: "Weather precipitation scoring",
+            forecastTypes: ["binary-probability"],
+            scoreTypes: ["brier"],
+            verificationModes: ["manual-review"]
+          }
+        ]
+      }
+    });
+
+    expect(result.valid).toBe(false);
+  });
+});
+
 describe("prediction-request schema", () => {
   it("accepts a valid request", async () => {
     const result = await validateSchema("prediction-request.schema.json", {

@@ -86,6 +86,7 @@ export interface PredictionRequest {
   };
   payment?: {
     preferredMethod?: PaymentMethod;
+    authorization?: Record<string, unknown>;
   };
 }
 

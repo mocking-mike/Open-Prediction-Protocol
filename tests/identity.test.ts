@@ -107,6 +107,46 @@ describe("identity and signatures", () => {
     expect(verifyPredictionResponseSignature(response)).toBe(false);
   });
 
+  it("rejects signatures that declare an unsupported algorithm", async () => {
+    const identity = createDidKeyIdentity();
+    const agent = new PredictionAgent({
+      provider: {
+        id: "provider-1"
+      },
+      identity,
+      handler: async () => ({
+        forecast: {
+          type: "binary-probability",
+          domain: "weather.precipitation",
+          horizon: "24h",
+          generatedAt: "2026-03-28T12:01:00Z",
+          probability: 0.68
+        }
+      })
+    });
+
+    const response = await agent.handleRequest({
+      requestId: "req-identity-unsupported-alg",
+      createdAt: "2026-03-28T12:00:00Z",
+      consumer: {
+        id: "consumer-1"
+      },
+      prediction: {
+        domain: "weather.precipitation",
+        question: "Will it rain?",
+        horizon: "24h",
+        desiredOutput: "binary-probability"
+      }
+    });
+
+    if (response.status !== "completed" || !response.signature) {
+      throw new Error("Expected signed completed response");
+    }
+
+    response.signature.alg = "RSA-PSS";
+    expect(verifyPredictionResponseSignature(response)).toBe(false);
+  });
+
   it("produces the same signature payload regardless of object property order", () => {
     const firstResponse = {
       responseId: "resp-1",

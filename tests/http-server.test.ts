@@ -186,4 +186,94 @@ describe("PredictionHttpServer", () => {
 
     expect(response.status).toBe(400);
   });
+
+  it("aborts provider-side streaming work when the client disconnects", async () => {
+    let aborted = false;
+
+    server = new PredictionHttpServer({
+      agentCard: {
+        protocolVersion: "0.1.0",
+        name: "weather-provider",
+        url: "https://provider.example.com",
+        capabilities: {
+          predictions: [
+            {
+              id: "weather.precipitation.daily",
+              domain: "weather.precipitation",
+              title: "Daily precipitation probability",
+              output: {
+                type: "binary-probability"
+              },
+              horizons: ["24h"]
+            }
+          ]
+        }
+      },
+      predictionAgent: new PredictionAgent({
+        provider: {
+          id: "provider-1"
+        },
+        handler: async (_request, context) =>
+          await new Promise((_resolve, reject) => {
+            context.signal?.addEventListener(
+              "abort",
+              () => {
+                aborted = true;
+                const error = new Error("aborted");
+                error.name = "AbortError";
+                reject(error);
+              },
+              { once: true }
+            );
+          })
+      })
+    });
+
+    let address: { host: string; port: number };
+    try {
+      address = await server.listen();
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("EPERM")) {
+        server = undefined;
+        return;
+      }
+      throw error;
+    }
+
+    const controller = new AbortController();
+    const response = await fetch(`http://${address.host}:${address.port}/rpc`, {
+      method: "POST",
+      headers: {
+        accept: "text/event-stream",
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: "req-abort-stream",
+        method: "tasks/sendSubscribe",
+        params: {
+          requestId: "req-abort-stream",
+          createdAt: "2026-03-29T12:00:00Z",
+          consumer: {
+            id: "consumer-1"
+          },
+          prediction: {
+            domain: "weather.precipitation",
+            question: "Will rainfall exceed 10mm?",
+            horizon: "24h",
+            desiredOutput: "binary-probability"
+          }
+        }
+      }),
+      signal: controller.signal
+    });
+
+    expect(response.status).toBe(200);
+    const reader = response.body?.getReader();
+    await reader?.read();
+    controller.abort();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(aborted).toBe(true);
+  });
 });

@@ -176,7 +176,7 @@ OPP is designed to support three important composition patterns:
 
 1. **Dependency Chains**: one forecast may explicitly depend on another upstream forecast.
 2. **Aggregation**: a consumer may query multiple providers and merge the results.
-3. **Conditional Triggers**: consumers may express follow-on prediction requests triggered by prior outcomes.
+3. **Conditional Triggers**: consumers may express follow-on prediction requests triggered by prior forecast outputs, and later implementations may extend that to resolved outcomes.
 
 This matters for both reusability and privacy.
 

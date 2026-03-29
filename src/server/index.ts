@@ -151,7 +151,16 @@ export class PredictionHttpServer {
     response: ServerResponse,
     payload: JsonRpcRequest
   ): Promise<void> {
-    void request;
+    const abortController = new AbortController();
+    const abortStream = () => {
+      if (!abortController.signal.aborted) {
+        abortController.abort();
+      }
+    };
+
+    request.once("aborted", abortStream);
+    request.once("close", abortStream);
+    response.once("close", abortStream);
 
     try {
       response.statusCode = 200;
@@ -160,12 +169,24 @@ export class PredictionHttpServer {
       response.setHeader("content-type", "text/event-stream; charset=utf-8");
       response.flushHeaders();
 
-      for await (const event of this.predictionAgent.streamRequest(payload.params)) {
+      for await (const event of this.predictionAgent.streamRequest(payload.params, {
+        signal: abortController.signal
+      })) {
+        if (abortController.signal.aborted) {
+          break;
+        }
         response.write(this.serializeSseEvent(event));
       }
 
-      response.end();
+      if (!abortController.signal.aborted) {
+        response.end();
+      }
     } catch (error) {
+      if (abortController.signal.aborted) {
+        response.end();
+        return;
+      }
+
       if (response.headersSent) {
         response.end();
         return;
@@ -173,6 +194,10 @@ export class PredictionHttpServer {
 
       const message = error instanceof Error ? error.message : "Request validation failed";
       this.sendJson(response, 400, this.rpcError(payload.id ?? null, -32000, message));
+    } finally {
+      request.off("aborted", abortStream);
+      request.off("close", abortStream);
+      response.off("close", abortStream);
     }
   }
 

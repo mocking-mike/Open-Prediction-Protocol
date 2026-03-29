@@ -108,6 +108,10 @@
         "preferredMethod": {
           "type": "string",
           "enum": ["free", "x402", "stripe", "custom"]
+        },
+        "authorization": {
+          "type": "object",
+          "additionalProperties": true
         }
       }
     }

@@ -135,6 +135,10 @@ export function verifyPredictionResponseSignature(response: PredictionResponse):
     return false;
   }
 
+  if (response.signature.alg !== "Ed25519") {
+    return false;
+  }
+
   const payload = Buffer.from(createSignaturePayload(response), "utf8");
   const publicKey = publicKeyFromDid(response.provider.did);
 

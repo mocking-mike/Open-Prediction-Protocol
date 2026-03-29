@@ -105,3 +105,4 @@ export class PredictionClient {
 export * from "./http.js";
 export * from "./x402.js";
 export * from "./aggregator.js";
+export * from "./conditional.js";

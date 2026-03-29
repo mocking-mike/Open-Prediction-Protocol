@@ -27,9 +27,16 @@ export interface PredictionHandlerResult {
   audit?: PredictionResponse["audit"];
 }
 
+export interface PredictionHandlerContext {
+  signal?: AbortSignal;
+}
+
 export interface PredictionAgentOptions {
   provider: PredictionResponse["provider"];
-  handler: (request: PredictionRequest) => Promise<PredictionHandlerResult> | PredictionHandlerResult;
+  handler: (
+    request: PredictionRequest,
+    context: PredictionHandlerContext
+  ) => Promise<PredictionHandlerResult> | PredictionHandlerResult;
   pricing?: {
     options: PricingOption[];
   };
@@ -55,8 +62,12 @@ export class PredictionAgent {
     this.rateLimiter = options.rateLimiter;
   }
 
-  async *streamRequest(request: unknown): AsyncGenerator<PredictionStreamEvent, void, void> {
+  async *streamRequest(
+    request: unknown,
+    context: PredictionHandlerContext = {}
+  ): AsyncGenerator<PredictionStreamEvent, void, void> {
     assertValidPredictionRequest(request);
+    throwIfAborted(context.signal);
 
     yield {
       type: "lifecycle",
@@ -74,21 +85,44 @@ export class PredictionAgent {
       provider: this.getProviderIdentity()
     };
 
-    const response = await this.handleRequest(request);
+    if (context.signal?.aborted) {
+      return;
+    }
+
+    let response: PredictionResponse;
+    try {
+      response = await this.handleRequest(request, context);
+    } catch (error) {
+      if (isAbortError(error) || context.signal?.aborted) {
+        return;
+      }
+      throw error;
+    }
+
+    if (context.signal?.aborted) {
+      return;
+    }
+
     yield {
       type: "result",
       response
     };
   }
 
-  async handleRequest(request: unknown): Promise<PredictionResponse> {
+  async handleRequest(
+    request: unknown,
+    context: PredictionHandlerContext = {}
+  ): Promise<PredictionResponse> {
     assertValidPredictionRequest(request);
+    throwIfAborted(context.signal);
 
     try {
       const negotiatedPayment = this.selectPayment(request);
       await this.applyRateLimitIfConfigured(request, negotiatedPayment);
-      await this.authorizePaymentIfNeeded(negotiatedPayment);
-      const result = await this.handler(request);
+      await this.authorizePaymentIfNeeded(request, negotiatedPayment);
+      throwIfAborted(context.signal);
+      const result = await this.handler(request, context);
+      throwIfAborted(context.signal);
       const response: PredictionResponse = {
         responseId: randomUUID(),
         requestId: request.requestId,
@@ -123,6 +157,10 @@ export class PredictionAgent {
       assertValidPredictionResponse(response);
       return response;
     } catch (error) {
+      if (isAbortError(error) || context.signal?.aborted) {
+        throw createAbortError();
+      }
+
       const message = error instanceof Error ? error.message : "Prediction handler failed";
       const response: PredictionResponse = {
         responseId: randomUUID(),
@@ -165,13 +203,17 @@ export class PredictionAgent {
   }
 
   private async authorizePaymentIfNeeded(
+    request: PredictionRequest,
     negotiated: NegotiatedPayment | undefined
   ): Promise<void> {
     if (!negotiated) {
       return;
     }
 
-    const resolution = await negotiated.provider.authorize(negotiated.option);
+    const resolution = await negotiated.provider.authorize({
+      option: negotiated.option,
+      request
+    });
     if (!resolution.authorized) {
       throw new Error(`Payment authorization failed for method: ${negotiated.option.method}`);
     }
@@ -210,4 +252,20 @@ export class PredictionAgent {
 
     return this.provider;
   }
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) {
+    throw createAbortError();
+  }
+}
+
+function createAbortError(): Error {
+  const error = new Error("Prediction request aborted");
+  error.name = "AbortError";
+  return error;
+}
+
+function isAbortError(error: unknown): error is Error {
+  return error instanceof Error && error.name === "AbortError";
 }

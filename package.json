@@ -2,12 +2,34 @@
   "name": "open-prediction-protocol",
   "version": "0.1.0",
   "description": "Open protocol for AI agents to discover prediction providers, request forecasts, compare trust signals, and pay — all through a single standard.",
-  "private": true,
   "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "spec",
+    "CHANGELOG.md",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
+    "build": "tsup",
+    "build:packages": "pnpm --filter ./packages/create-opp-agent run build",
+    "build:all": "pnpm run build && pnpm run build:packages",
+    "release:check": "pnpm run typecheck && pnpm test && pnpm run integration && pnpm run build:all",
+    "release:pack": "node scripts/pack-release-artifacts.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
     "test:watch": "vitest --passWithNoTests",
+    "conformance:http": "tsx scripts/run-http-conformance.ts",
     "example:weather": "tsx examples/weather-proxy.ts",
     "example:crypto": "tsx examples/crypto-proxy.ts",
     "example:sports": "tsx examples/sports-proxy.ts",
@@ -28,6 +50,9 @@
   ],
   "author": "",
   "license": "ISC",
+  "publishConfig": {
+    "access": "public"
+  },
   "packageManager": "pnpm@10.18.2",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.28.0",

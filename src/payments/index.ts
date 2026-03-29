@@ -1,4 +1,4 @@
-import type { PricingOption } from "../types/index.js";
+import type { PredictionRequest, PricingOption } from "../types/index.js";
 
 export interface PaymentResolution {
   method: PricingOption["method"];
@@ -8,7 +8,12 @@ export interface PaymentResolution {
 
 export interface PaymentProvider {
   readonly method: PricingOption["method"];
-  authorize(option: PricingOption): Promise<PaymentResolution> | PaymentResolution;
+  authorize(input: PaymentAuthorizationInput): Promise<PaymentResolution> | PaymentResolution;
+}
+
+export interface PaymentAuthorizationInput {
+  option: PricingOption;
+  request: PredictionRequest;
 }
 
 export interface NegotiatedPayment {
@@ -19,7 +24,7 @@ export interface NegotiatedPayment {
 export class FreePaymentProvider implements PaymentProvider {
   readonly method = "free" as const;
 
-  authorize(option: PricingOption): PaymentResolution {
+  authorize({ option }: PaymentAuthorizationInput): PaymentResolution {
     if (option.method !== "free" || option.model !== "free") {
       throw new Error("FreePaymentProvider can only authorize free pricing options");
     }
@@ -36,7 +41,7 @@ export class FreePaymentProvider implements PaymentProvider {
 
 export interface X402PaymentProviderOptions {
   authorize: (
-    option: PricingOption
+    input: PaymentAuthorizationInput
   ) => Promise<PaymentResolution> | PaymentResolution;
 }
 
@@ -48,12 +53,37 @@ export class X402PaymentProvider implements PaymentProvider {
     this.authorizeFn = options.authorize;
   }
 
-  authorize(option: PricingOption): Promise<PaymentResolution> | PaymentResolution {
+  authorize(input: PaymentAuthorizationInput): Promise<PaymentResolution> | PaymentResolution {
+    const { option } = input;
     if (option.method !== "x402") {
       throw new Error("X402PaymentProvider can only authorize x402 pricing options");
     }
 
-    return this.authorizeFn(option);
+    return this.authorizeFn(input);
+  }
+}
+
+export interface StripePaymentProviderOptions {
+  authorize: (
+    input: PaymentAuthorizationInput
+  ) => Promise<PaymentResolution> | PaymentResolution;
+}
+
+export class StripePaymentProvider implements PaymentProvider {
+  readonly method = "stripe" as const;
+  private readonly authorizeFn: StripePaymentProviderOptions["authorize"];
+
+  constructor(options: StripePaymentProviderOptions) {
+    this.authorizeFn = options.authorize;
+  }
+
+  authorize(input: PaymentAuthorizationInput): Promise<PaymentResolution> | PaymentResolution {
+    const { option } = input;
+    if (option.method !== "stripe") {
+      throw new Error("StripePaymentProvider can only authorize stripe pricing options");
+    }
+
+    return this.authorizeFn(input);
   }
 }
 

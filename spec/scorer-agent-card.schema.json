@@ -1,0 +1,169 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openpredictionprotocol.org/schemas/scorer-agent-card.schema.json",
+  "title": "OPP Scorer Agent Card",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["protocolVersion", "name", "url", "capabilities"],
+  "properties": {
+    "protocolVersion": {
+      "type": "string",
+      "pattern": "^0\\.1\\.0$"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1
+    },
+    "url": {
+      "type": "string",
+      "format": "uri"
+    },
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "did": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scoring"],
+      "properties": {
+        "scoring": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "domain",
+              "title",
+              "forecastTypes",
+              "scoreTypes",
+              "verificationModes"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9._-]*$"
+              },
+              "domain": {
+                "type": "string",
+                "pattern": "^[a-z0-9]+(?:\\.[a-z0-9]+)+$"
+              },
+              "title": {
+                "type": "string",
+                "minLength": 1
+              },
+              "description": {
+                "type": "string",
+                "minLength": 1
+              },
+              "forecastTypes": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "binary-probability",
+                    "categorical-distribution",
+                    "numeric-range"
+                  ]
+                }
+              },
+              "scoreTypes": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "string",
+                  "enum": ["brier", "log"]
+                }
+              },
+              "verificationModes": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "outcome-resolution",
+                    "calibration-attestation",
+                    "consensus-resolution"
+                  ]
+                }
+              },
+              "horizons": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "pricing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["options"],
+      "properties": {
+        "options": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["method", "model"],
+            "properties": {
+              "method": {
+                "type": "string",
+                "enum": ["free", "x402", "stripe", "custom"]
+              },
+              "model": {
+                "type": "string",
+                "enum": ["free", "per-request", "subscription", "custom"]
+              },
+              "currency": {
+                "type": "string",
+                "minLength": 1
+              },
+              "amount": {
+                "type": "number",
+                "minimum": 0
+              }
+            }
+          }
+        }
+      }
+    },
+    "compliance": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "riskLevel": {
+          "type": "string",
+          "enum": ["minimal", "limited", "high", "unknown"]
+        },
+        "humanOversight": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

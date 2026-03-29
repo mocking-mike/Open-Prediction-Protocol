@@ -107,13 +107,13 @@ pnpm test
 | [x] 4.1 | Implement `src/observability/metrics.ts` for Brier scoring utilities and domain-scoped calibration metadata | Standardized evaluation evidence |
 | [x] 4.2 | Implement prediction resolution flow (ground truth → score update → Agent Card refresh) | Calibration feedback loop |
 | [x] 4.3 | Implement `src/observability/tracing.ts` with a lightweight tracing facade and span primitives | Protocol observability |
-| 4.4 | Implement `src/observability/logger.ts` with correlation IDs | Structured logs |
-| 4.5 | Implement `src/observability/golden-tasks.ts` for periodic known-answer checks | Operational trust monitoring |
-| 4.6 | Implement `src/observability/confidence-monitor.ts` for drift and deviation signals | Quality degradation detection |
-| 4.7 | Add circuit-breaker logic to reject degraded providers or route to fallback | Safer consumption |
-| 4.8 | Write scoring, calibration, and monitoring tests | Validation |
-| 4.9 | Configure `tsup` for dual ESM/CJS build + `src/index.ts` entry point | Packaging |
-| 4.10 | Final verification: typecheck + all tests + integration + build | Release readiness |
+| [x] 4.4 | Implement `src/observability/logger.ts` with correlation IDs | Structured logs |
+| [x] 4.5 | Implement `src/observability/golden-tasks.ts` for periodic known-answer checks | Operational trust monitoring |
+| [x] 4.6 | Implement `src/observability/confidence-monitor.ts` for drift and deviation signals | Quality degradation detection |
+| [x] 4.7 | Add circuit-breaker logic to reject degraded providers or route to fallback | Safer consumption |
+| [x] 4.8 | Write scoring, calibration, and monitoring tests | Validation |
+| [x] 4.9 | Configure `tsup` for dual ESM/CJS build + `src/index.ts` entry point | Packaging |
+| [x] 4.10 | Final verification: typecheck + all tests + integration + build | Release readiness |
 
 **Operational follow-up identified after M3 review:**
 
@@ -134,18 +134,18 @@ pnpm run typecheck && pnpm test && pnpm run integration && pnpm run build
 
 | # | Task | Purpose |
 |---|---|---|
-| 5.1 | Design scorer role schema (`spec/scorer-agent-card.schema.json`) | Independent verification role |
-| 5.2 | Implement `src/scoring/ledger.ts` for append-only prediction records | Auditability foundation |
-| 5.3 | Implement `src/scoring/consensus.ts` for pluggable multi-source resolution logic | Stronger verification path |
-| 5.4 | Implement `src/security/query-privacy.ts` for blind or privacy-sensitive requests | Sensitive forecast support |
-| 5.5 | Implement `src/security/anomaly-detector.ts` for prediction poisoning signals | Abuse detection |
-| 5.6 | Implement `StripePaymentProvider` for fiat support | Broader payment compatibility |
-| 5.7 | Implement `src/compliance/filter.ts` for consumer-side compliance filtering | Deployment policy support |
-| 5.8 | Implement `src/compliance/audit-logger.ts` for structured audit events | Audit trail support |
-| 5.9 | Implement `src/compliance/oversight.ts` for override / stop endpoints | Human oversight hooks |
-| 5.10 | Document compliance profiles for selected regulated domains | Deployment guidance |
-| 5.11 | Implement `src/client/conditional.ts` for conditional trigger subscriptions | Advanced composition |
-| 5.12 | Create `packages/create-opp-agent/` CLI scaffolding tool | Faster adoption |
+| [x] 5.1 | Design scorer role schema (`spec/scorer-agent-card.schema.json`) | Independent verification role |
+| [x] 5.2 | Implement `src/scoring/ledger.ts` for append-only prediction records | Auditability foundation |
+| [x] 5.3 | Implement `src/scoring/consensus.ts` for pluggable multi-source resolution logic | Stronger verification path |
+| [x] 5.4 | Implement `src/security/query-privacy.ts` for blind or privacy-sensitive requests | Sensitive forecast support |
+| [x] 5.5 | Implement `src/security/anomaly-detector.ts` for prediction poisoning signals | Abuse detection |
+| [x] 5.6 | Implement `StripePaymentProvider` for fiat support | Broader payment compatibility |
+| [x] 5.7 | Implement `src/compliance/filter.ts` for consumer-side compliance filtering | Deployment policy support |
+| [x] 5.8 | Implement `src/compliance/audit-logger.ts` for structured audit events | Audit trail support |
+| [x] 5.9 | Implement `src/compliance/oversight.ts` for override / stop decision helpers | Human oversight hooks |
+| [x] 5.10 | Document compliance profiles for selected regulated domains | Deployment guidance |
+| [x] 5.11 | Implement `src/client/conditional.ts` for conditional trigger subscriptions | Advanced composition |
+| [x] 5.12 | Create `packages/create-opp-agent/` CLI scaffolding tool | Faster adoption |
 
 ---
 
@@ -192,8 +192,8 @@ gantt
 | **M1** | Schemas, types, validation, protocol framing | Complete |
 | **M2** | Reference SDK and demo providers | Complete |
 | **M3** | Identity, payments, MCP integration, aggregation | Complete, including identity, x402 payments, MCP tools, aggregation, rate limiting, SSE lifecycle streaming, and demo examples |
-| **M4** | Calibration metadata, observability, production hardening | ~5 days |
-| **M5** | Advanced verification, privacy, compliance, scaffolding | ~10 days |
+| **M4** | Calibration metadata, observability, production hardening | Complete |
+| **M5** | Advanced verification, privacy, compliance, scaffolding | Complete |
 
 ---
 
@@ -204,3 +204,27 @@ gantt
 3. **Demoable at each step.** The roadmap prioritizes externally understandable demos, especially provider discovery, request/response interoperability, and multi-provider consumption.
 4. **Trust strengthens in layers.** Early versions can expose provisional metadata; later versions add stronger independent verification paths.
 5. **Composable by design.** OPP should support reusable upstream forecasts, dependency chains, aggregation, and private downstream composition.
+
+---
+
+## Public Launch Checklist
+
+**Goal:** Prepare OPP for a public draft release as a credible protocol and reference SDK for the agentic economy.
+
+> [!NOTE]
+> This checklist is about launch and standardization readiness. It is separate from milestone feature work.
+
+| # | Task | Purpose |
+|---|---|---|
+| [x] L1 | Remove `"private": true` from publishable packages and finalize package metadata | Enable real package distribution |
+| [x] L2 | Add `SECURITY.md`, `CONTRIBUTING.md`, and `CODE_OF_CONDUCT.md` | Establish public project trust and contribution flow |
+| [x] L3 | Write a versioning and compatibility policy for schemas, wire methods, and SDK exports | Define what is stable vs experimental |
+| [x] L4 | Separate normative protocol requirements from explanatory whitepaper guidance | Make the spec easier to implement independently |
+| [x] L5 | Create a conformance test suite for independent OPP implementations | Support interoperability and standardization |
+| [x] L6 | Add a protocol maturity statement to `README.md` (`draft`, `reference SDK`, stability expectations) | Set correct adopter expectations |
+| [x] L7 | Run a security review of signing, payment negotiation, streaming, and public HTTP surfaces | Reduce launch risk |
+| [x] L8 | Implement abort-aware SSE cancellation for disconnecting clients | Improve operational correctness for long-running streams |
+| [x] L9 | Add implementer docs for building compatible providers and consumers without this SDK | Encourage independent implementations |
+| [x] L10 | Demonstrate interoperability with at least one independent implementation | Validate standard viability |
+| [x] L11 | Define lightweight project governance for protocol evolution and change approval | Reduce single-repo standard risk |
+| [x] L12 | Add release automation and changelog discipline for public versioned releases | Improve reliability of public distribution |

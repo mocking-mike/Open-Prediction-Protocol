@@ -4,6 +4,7 @@
     "target": "es2023",
     "lib": ["es2023"],
     "types": ["node"],
+    "ignoreDeprecations": "6.0",
     "resolveJsonModule": true,
     "sourceMap": true,
     "declaration": true,
@@ -19,5 +20,5 @@
     "moduleDetection": "force",
     "skipLibCheck": true
   },
-  "include": ["src/**/*.ts", "examples/**/*.ts", "spec/**/*.json", "tests/**/*.ts", "*.md"]
+  "include": ["src/**/*.ts", "examples/**/*.ts", "packages/**/*.ts", "scripts/**/*.ts", "spec/**/*.json", "tests/**/*.ts", "*.md"]
 }
