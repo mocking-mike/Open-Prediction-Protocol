@@ -97,4 +97,47 @@ describe("schema validators", () => {
     expect(errors.length).toBeGreaterThan(0);
     expect(errors[0]).toContain("must");
   });
+
+  it("rejects invalid date-time values in runtime validators", () => {
+    const value = {
+      requestId: "req-1",
+      createdAt: "not-a-date",
+      consumer: {
+        id: "consumer-1"
+      },
+      prediction: {
+        domain: "weather.precipitation",
+        question: "Will rainfall exceed 10mm?",
+        horizon: "24h",
+        desiredOutput: "binary-probability"
+      }
+    };
+
+    expect(validatePredictionRequest(value)).toBe(false);
+    expect(() => assertValidPredictionRequest(value)).toThrow();
+  });
+
+  it("rejects invalid URI values in runtime validators", () => {
+    const value = {
+      protocolVersion: "0.1.0",
+      name: "weather-provider",
+      url: "not-a-uri",
+      capabilities: {
+        predictions: [
+          {
+            id: "weather.precipitation.daily",
+            domain: "weather.precipitation",
+            title: "Daily precipitation probability",
+            output: {
+              type: "binary-probability"
+            },
+            horizons: ["24h"]
+          }
+        ]
+      }
+    };
+
+    expect(validateAgentCard(value)).toBe(false);
+    expect(() => assertValidAgentCard(value)).toThrow();
+  });
 });

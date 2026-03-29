@@ -85,7 +85,7 @@ pnpm run integration
 | [x] 3.7 | Build `src/mcp/prediction-mcp-server.ts` exposing OPP-backed tools | MCP integration surface |
 | [x] 3.8 | Implement `src/client/aggregator.ts` for fan-out and merge across providers | Multi-provider composition |
 | [x] 3.9 | Implement `src/security/rate-limiter.ts` for per-agent limits and spending caps | Operational control |
-| 3.10 | Add SSE streaming (`tasks/sendSubscribe`) to server and client | Long-running request support |
+| [x] 3.10 | Add SSE streaming (`tasks/sendSubscribe`) to server and client | Long-running request support |
 | [x] 3.11 | Update examples to demonstrate signing, payment, and aggregation | Protocol ergonomics |
 
 **Verification:**
@@ -95,11 +95,7 @@ pnpm test
 # Aggregation test queries multiple providers and merges the results
 ```
 
-**Follow-up hardening for current M3 code:**
-
-- Add a schema/type drift guard so changes in `spec/` and `src/types/` cannot silently diverge.
-- Add a guard or generation path so MCP tool input schemas stay aligned with the canonical OPP request schema.
-- Replace or formally standardize the current signature canonicalization with an RFC 8785-compatible approach before the signing format is treated as stable.
+**Follow-up hardening for current M3 code:** complete
 
 ---
 
@@ -108,9 +104,9 @@ pnpm test
 
 | # | Task | Purpose |
 |---|---|---|
-| 4.1 | Implement `src/observability/metrics.ts` for Brier scoring utilities and domain-scoped calibration metadata | Standardized evaluation evidence |
-| 4.2 | Implement prediction resolution flow (ground truth → score update → Agent Card refresh) | Calibration feedback loop |
-| 4.3 | Implement `src/observability/tracing.ts` with OpenTelemetry spans | Protocol observability |
+| [x] 4.1 | Implement `src/observability/metrics.ts` for Brier scoring utilities and domain-scoped calibration metadata | Standardized evaluation evidence |
+| [x] 4.2 | Implement prediction resolution flow (ground truth → score update → Agent Card refresh) | Calibration feedback loop |
+| [x] 4.3 | Implement `src/observability/tracing.ts` with a lightweight tracing facade and span primitives | Protocol observability |
 | 4.4 | Implement `src/observability/logger.ts` with correlation IDs | Structured logs |
 | 4.5 | Implement `src/observability/golden-tasks.ts` for periodic known-answer checks | Operational trust monitoring |
 | 4.6 | Implement `src/observability/confidence-monitor.ts` for drift and deviation signals | Quality degradation detection |
@@ -118,6 +114,10 @@ pnpm test
 | 4.8 | Write scoring, calibration, and monitoring tests | Validation |
 | 4.9 | Configure `tsup` for dual ESM/CJS build + `src/index.ts` entry point | Packaging |
 | 4.10 | Final verification: typecheck + all tests + integration + build | Release readiness |
+
+**Operational follow-up identified after M3 review:**
+
+- Add abort-aware streaming so long-running `tasks/sendSubscribe` requests stop provider-side work promptly when clients disconnect.
 
 **Verification:**
 ```bash
@@ -191,7 +191,7 @@ gantt
 |---|---|---|
 | **M1** | Schemas, types, validation, protocol framing | Complete |
 | **M2** | Reference SDK and demo providers | Complete |
-| **M3** | Identity, payments, MCP integration, aggregation | In progress, identity, x402 payments, MCP tools, aggregation, rate limiting, and demo examples implemented |
+| **M3** | Identity, payments, MCP integration, aggregation | Complete, including identity, x402 payments, MCP tools, aggregation, rate limiting, SSE lifecycle streaming, and demo examples |
 | **M4** | Calibration metadata, observability, production hardening | ~5 days |
 | **M5** | Advanced verification, privacy, compliance, scaffolding | ~10 days |
 

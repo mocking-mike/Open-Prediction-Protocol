@@ -10,7 +10,14 @@ import {
   assertValidPredictionRequest,
   assertValidPredictionResponse
 } from "../schemas/index.js";
-import type { Forecast, PredictionRequest, PredictionResponse, PricingOption } from "../types/index.js";
+import type {
+  AgentIdentity,
+  Forecast,
+  PredictionRequest,
+  PredictionResponse,
+  PredictionStreamEvent,
+  PricingOption
+} from "../types/index.js";
 
 export interface PredictionHandlerResult {
   forecast: Forecast;
@@ -48,6 +55,32 @@ export class PredictionAgent {
     this.rateLimiter = options.rateLimiter;
   }
 
+  async *streamRequest(request: unknown): AsyncGenerator<PredictionStreamEvent, void, void> {
+    assertValidPredictionRequest(request);
+
+    yield {
+      type: "lifecycle",
+      requestId: request.requestId,
+      createdAt: new Date().toISOString(),
+      state: "submitted",
+      provider: this.getProviderIdentity()
+    };
+
+    yield {
+      type: "lifecycle",
+      requestId: request.requestId,
+      createdAt: new Date().toISOString(),
+      state: "working",
+      provider: this.getProviderIdentity()
+    };
+
+    const response = await this.handleRequest(request);
+    yield {
+      type: "result",
+      response
+    };
+  }
+
   async handleRequest(request: unknown): Promise<PredictionResponse> {
     assertValidPredictionRequest(request);
 
@@ -61,12 +94,7 @@ export class PredictionAgent {
         requestId: request.requestId,
         status: "completed",
         createdAt: new Date().toISOString(),
-        provider: this.identity?.did
-          ? {
-              ...this.provider,
-              did: this.identity.did
-            }
-          : this.provider,
+        provider: this.getProviderIdentity(),
         forecast: result.forecast,
         ...((result.freshness || this.identity)
           ? {
@@ -101,12 +129,7 @@ export class PredictionAgent {
         requestId: request.requestId,
         status: "failed",
         createdAt: new Date().toISOString(),
-        provider: this.identity?.did
-          ? {
-              ...this.provider,
-              did: this.identity.did
-            }
-          : this.provider,
+        provider: this.getProviderIdentity(),
         error: {
           code: "prediction_failed",
           message
@@ -175,5 +198,16 @@ export class PredictionAgent {
           : "Rate limit exceeded";
       throw new Error(`${suffix}; reset at ${decision.resetAt}`);
     }
+  }
+
+  private getProviderIdentity(): AgentIdentity {
+    if (this.identity?.did) {
+      return {
+        ...this.provider,
+        did: this.identity.did
+      };
+    }
+
+    return this.provider;
   }
 }

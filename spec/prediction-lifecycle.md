@@ -61,4 +61,6 @@ submitted
 ## Notes
 
 - v0.1 does not define `input-required`, `cancelled`, or streaming partial-result states.
+- Providers may expose lifecycle progress over SSE transport without changing the canonical response schema.
+- In the reference SDK, `tasks/sendSubscribe` streams `submitted`, `working`, and one terminal `result` event whose payload is the normal `PredictionResponse`.
 - Additional states may be introduced later if they provide protocol-level interoperability value.

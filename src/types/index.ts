@@ -163,3 +163,18 @@ export interface FailedPredictionResponse extends PredictionResponseBase {
 }
 
 export type PredictionResponse = CompletedPredictionResponse | FailedPredictionResponse;
+
+export interface PredictionLifecycleEvent {
+  type: "lifecycle";
+  requestId: string;
+  createdAt: string;
+  state: "submitted" | "working";
+  provider?: AgentIdentity;
+}
+
+export interface PredictionResultEvent {
+  type: "result";
+  response: PredictionResponse;
+}
+
+export type PredictionStreamEvent = PredictionLifecycleEvent | PredictionResultEvent;

@@ -11,42 +11,51 @@ const implementation = {
   version: "0.1.0"
 } as const;
 
-const agentIdentitySchema = z.object({
-  id: z.string(),
-  did: z.string().optional()
-});
+const domainPattern = /^[a-z0-9]+(?:\.[a-z0-9]+)+$/;
+const capabilityIdPattern = /^[a-z0-9][a-z0-9._-]*$/;
 
-const predictionRequestSchema = z.object({
-  requestId: z.string(),
-  createdAt: z.string(),
+const forecastTypeSchema = z.enum([
+  "binary-probability",
+  "categorical-distribution",
+  "numeric-range"
+]);
+
+const verificationStatusSchema = z.enum(["self-reported", "provisional", "verified"]);
+const paymentMethodSchema = z.enum(["free", "x402", "stripe", "custom"]);
+const privacyModeSchema = z.enum(["plain", "blinded"]);
+
+const agentIdentitySchema = z.object({
+  id: z.string().min(1),
+  did: z.string().optional()
+}).strict();
+
+export const predictionRequestInputSchema = z.object({
+  requestId: z.string().min(1),
+  createdAt: z.iso.datetime(),
   consumer: agentIdentitySchema,
   prediction: z.object({
-    domain: z.string(),
-    question: z.string(),
-    horizon: z.string(),
-    desiredOutput: z.enum([
-      "binary-probability",
-      "categorical-distribution",
-      "numeric-range"
-    ]),
-    resolution: z.string().optional(),
+    domain: z.string().regex(domainPattern),
+    question: z.string().min(1),
+    horizon: z.string().min(1),
+    desiredOutput: forecastTypeSchema,
+    resolution: z.string().min(1).optional(),
     context: z.record(z.string(), z.unknown()).optional()
-  }),
+  }).strict(),
   constraints: z.object({
-    maxLatencyMs: z.number().optional(),
-    maxPrice: z.number().optional(),
-    minVerificationStatus: z.enum(["self-reported", "provisional", "verified"]).optional(),
+    maxLatencyMs: z.int().min(1).optional(),
+    maxPrice: z.number().min(0).optional(),
+    minVerificationStatus: verificationStatusSchema.optional(),
     compliance: z.object({
       humanOversightRequired: z.boolean().optional()
-    }).optional()
-  }).optional(),
+    }).strict().optional()
+  }).strict().optional(),
   privacy: z.object({
-    mode: z.enum(["plain", "blinded"]).optional()
-  }).optional(),
+    mode: privacyModeSchema.optional()
+  }).strict().optional(),
   payment: z.object({
-    preferredMethod: z.enum(["free", "x402", "stripe", "custom"]).optional()
-  }).optional()
-});
+    preferredMethod: paymentMethodSchema.optional()
+  }).strict().optional()
+}).strict();
 
 const aggregationStrategySchema = z.enum(["equal-weight", "calibration-weighted"]);
 
@@ -117,7 +126,7 @@ export function createPredictionMcpServer(
       description: "Send one OPP prediction request to a specific configured provider.",
       inputSchema: {
         providerId: z.string(),
-        request: predictionRequestSchema
+        request: predictionRequestInputSchema
       },
       annotations: {
         readOnlyHint: true,
@@ -171,7 +180,7 @@ export function createPredictionMcpServer(
       inputSchema: {
         providerIds: z.array(z.string()).optional(),
         strategy: aggregationStrategySchema.optional(),
-        request: predictionRequestSchema
+        request: predictionRequestInputSchema
       },
       annotations: {
         readOnlyHint: true,

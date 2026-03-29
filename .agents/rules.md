@@ -81,3 +81,23 @@ Every non-trivial technical or architectural decision **must** be logged.
 - Append entries to `.agents/decisions.md` — never edit or remove past entries.
 - Read existing decisions **before** making a related choice to ensure consistency.
 - When in doubt about whether something is "non-trivial," log it — a short entry costs less than a lost rationale.
+
+## 10. Review Each Slice
+
+Every completed implementation slice should be followed by a focused code review before moving to the next slice.
+
+- Review the code with a bug-risk and regression-risk mindset.
+- Findings should be concrete, severity-ordered, and tied to file references.
+- Fix issues that are small and clearly worth doing immediately.
+- Fix review findings immediately when they are correctness-critical, protocol-breaking, security-relevant, or likely to cause behavioural regressions.
+- If a review finding is real but not worth fixing in the current slice, add it to `roadmap.md` instead of leaving it implicit.
+- Do not proceed to the next slice until each review finding is either fixed, explicitly rejected with rationale, or added to `roadmap.md`.
+
+## 11. Review Before Each Milestone
+
+Before starting a new milestone, do a broader consistency review of the current repository state.
+
+- Compare the implementation against `whitepaper.md`, `roadmap.md`, and `.agents/decisions.md`.
+- Check that docs and examples do not overclaim beyond what the code and tests actually support.
+- Verify that completed roadmap items are genuinely implemented and tested.
+- Capture any gaps either as immediate fixes or as explicit roadmap follow-ups.

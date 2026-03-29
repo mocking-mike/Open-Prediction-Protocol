@@ -16,7 +16,7 @@ import {
 export const signedPaidWeatherAgentCard: AgentCard = {
   protocolVersion: "0.1.0",
   name: "signed-paid-weather-proxy",
-  description: "Example OPP provider demonstrating signed responses and x402-priced access.",
+  description: "Example OPP provider demonstrating signed responses, x402 pricing metadata, and local mock authorization.",
   url: "http://127.0.0.1:3004",
   identity: {
     id: "signed-paid-weather-proxy"

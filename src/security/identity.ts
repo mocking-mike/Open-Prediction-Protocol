@@ -42,6 +42,18 @@ function base58btcDecode(value: string): Buffer {
   return Buffer.from(bs58.decode(value));
 }
 
+function compareUtf16CodeUnits(left: string, right: string): number {
+  const maxLength = Math.min(left.length, right.length);
+  for (let index = 0; index < maxLength; index += 1) {
+    const difference = left.charCodeAt(index) - right.charCodeAt(index);
+    if (difference !== 0) {
+      return difference;
+    }
+  }
+
+  return left.length - right.length;
+}
+
 export function createDidKeyIdentity(): DidKeyIdentity {
   const { privateKey, publicKey } = generateKeyPairSync("ed25519");
   const rawPublicKey = extractRawPublicKey(publicKey);
@@ -75,26 +87,32 @@ export function publicKeyFromDid(did: string): KeyObject {
   return createPublicKey({ key: der, format: "der", type: "spki" });
 }
 
-function canonicalize(value: unknown): string {
+function canonicalizeJson(value: unknown): string {
+  if (typeof value === "number" && !Number.isFinite(value)) {
+    throw new Error("Canonical JSON does not support non-finite numbers");
+  }
+
   if (value === null || typeof value !== "object") {
     return JSON.stringify(value);
   }
 
   if (Array.isArray(value)) {
-    return `[${value.map((item) => canonicalize(item)).join(",")}]`;
+    return `[${value
+      .map((item) => (item === undefined ? "null" : canonicalizeJson(item)))
+      .join(",")}]`;
   }
 
   const entries = Object.entries(value as Record<string, unknown>)
     .filter(([, entryValue]) => entryValue !== undefined)
-    .sort(([left], [right]) => left.localeCompare(right))
-    .map(([key, entryValue]) => `${JSON.stringify(key)}:${canonicalize(entryValue)}`);
+    .sort(([left], [right]) => compareUtf16CodeUnits(left, right))
+    .map(([key, entryValue]) => `${JSON.stringify(key)}:${canonicalizeJson(entryValue)}`);
 
   return `{${entries.join(",")}}`;
 }
 
 export function createSignaturePayload(response: PredictionResponse): string {
   const { signature: _signature, ...unsignedResponse } = response;
-  return canonicalize(unsignedResponse);
+  return canonicalizeJson(unsignedResponse);
 }
 
 export function signPredictionResponse(

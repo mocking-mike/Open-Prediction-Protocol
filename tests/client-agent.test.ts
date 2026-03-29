@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { PredictionAgent } from "../src/agent/index.js";
 import { PredictionClient } from "../src/client/index.js";
 import { createDidKeyIdentity } from "../src/security/identity.js";
-import type { PredictionRequest } from "../src/types/index.js";
+import type { PredictionRequest, PredictionStreamEvent } from "../src/types/index.js";
 
 function createRequest(): PredictionRequest {
   return {
@@ -108,5 +108,44 @@ describe("PredictionAgent and PredictionClient", () => {
     });
 
     expect(response.status).toBe("completed");
+  });
+
+  it("streams lifecycle updates before the terminal response", async () => {
+    const agent = new PredictionAgent({
+      provider: {
+        id: "provider-1"
+      },
+      handler: async () => ({
+        forecast: {
+          type: "binary-probability",
+          domain: "weather.precipitation",
+          horizon: "24h",
+          generatedAt: "2026-03-28T12:01:00Z",
+          probability: 0.7
+        }
+      })
+    });
+
+    const events: PredictionStreamEvent[] = [];
+    for await (const event of agent.streamRequest(createRequest())) {
+      events.push(event);
+    }
+
+    expect(events).toHaveLength(3);
+    expect(events[0]).toMatchObject({
+      type: "lifecycle",
+      state: "submitted",
+      requestId: "req-1"
+    });
+    expect(events[1]).toMatchObject({
+      type: "lifecycle",
+      state: "working",
+      requestId: "req-1"
+    });
+    expect(events[2]?.type).toBe("result");
+    if (events[2]?.type !== "result") {
+      throw new Error("Expected a terminal result event");
+    }
+    expect(events[2].response.status).toBe("completed");
   });
 });

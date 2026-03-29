@@ -24,6 +24,7 @@ The repository currently includes:
 - client-side aggregation across compatible providers
 - in-memory rate limiting for request and spend control
 - a minimal HTTP provider surface
+- SSE lifecycle streaming for long-running requests
 - example weather, crypto, and sports providers
 
 ## Install
@@ -65,7 +66,7 @@ pnpm run example:aggregation
 
 Additional demos:
 
-- `example:signed-paid` demonstrates signed responses and x402-priced access with local mock authorization.
+- `example:signed-paid` demonstrates signed responses, x402 pricing metadata, and local mock authorization.
 - `example:aggregation` starts two local providers and merges their forecasts with `PredictionAggregator`.
 
 ## Run the Integration Example
@@ -103,6 +104,16 @@ The minimal provider HTTP surface is:
 Current method:
 
 - `predictions.request`
+- `tasks/sendSubscribe`
+
+### Streaming Semantics
+
+`tasks/sendSubscribe` returns `text/event-stream` and emits:
+
+- `lifecycle` events for `submitted` and `working`
+- one terminal `result` event containing the normal OPP `PredictionResponse`
+
+This keeps the canonical response schema unchanged while allowing long-running providers to expose progress over SSE.
 
 ### Example RPC Request
 

@@ -172,7 +172,7 @@ The protocol itself does not mandate one forecasting method. It standardizes how
 
 Prediction procurement becomes more useful when forecasts are composable.
 
-OPP supports three important patterns:
+OPP is designed to support three important composition patterns:
 
 1. **Dependency Chains**: one forecast may explicitly depend on another upstream forecast.
 2. **Aggregation**: a consumer may query multiple providers and merge the results.

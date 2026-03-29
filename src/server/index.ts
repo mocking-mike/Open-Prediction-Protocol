@@ -2,7 +2,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 
 import { PredictionAgent } from "../agent/index.js";
 import { assertValidAgentCard } from "../schemas/index.js";
-import type { AgentCard } from "../types/index.js";
+import type { AgentCard, PredictionStreamEvent } from "../types/index.js";
 
 interface JsonRpcRequest {
   jsonrpc: "2.0";
@@ -127,6 +127,11 @@ export class PredictionHttpServer {
       return;
     }
 
+    if (payload.method === "tasks/sendSubscribe") {
+      await this.handleSse(request, response, payload);
+      return;
+    }
+
     if (payload.method !== "predictions.request") {
       this.sendJson(response, 404, this.rpcError(payload.id ?? null, -32601, "Method not found"));
       return;
@@ -136,6 +141,36 @@ export class PredictionHttpServer {
       const result = await this.predictionAgent.handleRequest(payload.params);
       this.sendJson(response, 200, this.rpcSuccess(payload.id ?? null, result));
     } catch (error) {
+      const message = error instanceof Error ? error.message : "Request validation failed";
+      this.sendJson(response, 400, this.rpcError(payload.id ?? null, -32000, message));
+    }
+  }
+
+  private async handleSse(
+    request: IncomingMessage,
+    response: ServerResponse,
+    payload: JsonRpcRequest
+  ): Promise<void> {
+    void request;
+
+    try {
+      response.statusCode = 200;
+      response.setHeader("cache-control", "no-cache, no-transform");
+      response.setHeader("connection", "keep-alive");
+      response.setHeader("content-type", "text/event-stream; charset=utf-8");
+      response.flushHeaders();
+
+      for await (const event of this.predictionAgent.streamRequest(payload.params)) {
+        response.write(this.serializeSseEvent(event));
+      }
+
+      response.end();
+    } catch (error) {
+      if (response.headersSent) {
+        response.end();
+        return;
+      }
+
       const message = error instanceof Error ? error.message : "Request validation failed";
       this.sendJson(response, 400, this.rpcError(payload.id ?? null, -32000, message));
     }
@@ -182,6 +217,11 @@ export class PredictionHttpServer {
     response.statusCode = statusCode;
     response.setHeader("content-type", "application/json; charset=utf-8");
     response.end(JSON.stringify(body));
+  }
+
+  private serializeSseEvent(event: PredictionStreamEvent): string {
+    const eventName = event.type === "lifecycle" ? "lifecycle" : "result";
+    return `event: ${eventName}\ndata: ${JSON.stringify(event)}\n\n`;
   }
 }
 

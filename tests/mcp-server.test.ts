@@ -1,9 +1,14 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { z } from "zod";
 
-import { createPredictionMcpServer } from "../src/mcp/prediction-mcp-server.js";
+import {
+  createPredictionMcpServer,
+  predictionRequestInputSchema
+} from "../src/mcp/prediction-mcp-server.js";
 import type { PredictionMcpProvider } from "../src/mcp/prediction-mcp-server.js";
+import { validatePredictionRequest } from "../src/schemas/index.js";
 
 function createProvider(
   id: string,
@@ -200,5 +205,75 @@ describe("Prediction MCP server", () => {
         probability: 0.5
       }
     });
+  });
+
+  it("keeps MCP request validation aligned with the canonical request schema", () => {
+    const validRequest = {
+      requestId: "req-1",
+      createdAt: "2026-03-28T12:00:00Z",
+      consumer: {
+        id: "consumer-1"
+      },
+      prediction: {
+        domain: "weather.precipitation",
+        question: "Will it rain?",
+        horizon: "24h",
+        desiredOutput: "binary-probability"
+      }
+    };
+
+    const invalidRequests = [
+      {
+        requestId: "req-2",
+        createdAt: "2026-03-28T12:00:00Z",
+        consumer: {
+          id: "consumer-1"
+        },
+        prediction: {
+          domain: "weather",
+          question: "Will it rain?",
+          horizon: "24h",
+          desiredOutput: "binary-probability"
+        }
+      },
+      {
+        requestId: "req-3",
+        createdAt: "2026-03-28T12:00:00Z",
+        consumer: {
+          id: "consumer-1"
+        },
+        prediction: {
+          domain: "weather.precipitation",
+          question: "Will it rain?",
+          horizon: "24h",
+          desiredOutput: "binary-probability"
+        },
+        constraints: {
+          maxLatencyMs: 1.5
+        }
+      },
+      {
+        requestId: "req-4",
+        createdAt: "2026-03-28T12:00:00Z",
+        consumer: {
+          id: "consumer-1"
+        },
+        prediction: {
+          domain: "weather.precipitation",
+          question: "Will it rain?",
+          horizon: "24h",
+          desiredOutput: "binary-probability",
+          extraField: true
+        }
+      }
+    ];
+
+    expect(validatePredictionRequest(validRequest)).toBe(true);
+    expect(() => z.parse(predictionRequestInputSchema, validRequest)).not.toThrow();
+
+    for (const invalidRequest of invalidRequests) {
+      expect(validatePredictionRequest(invalidRequest)).toBe(false);
+      expect(() => z.parse(predictionRequestInputSchema, invalidRequest)).toThrow();
+    }
   });
 });

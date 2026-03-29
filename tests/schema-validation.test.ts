@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest";
 type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 type ValidatorFn = ((data: unknown) => boolean) & { errors?: ErrorObject[] | null };
 type AjvLike = {
+  addFormat: (name: string, validator: { validate: (value: string) => boolean }) => AjvLike;
   compile: (schema: object) => ValidatorFn;
 };
 type AjvCtor = new (options: Record<string, unknown>) => AjvLike;
@@ -23,7 +24,38 @@ async function validateSchema(name: string, data: JsonValue): Promise<{ valid: b
   const ajv = new Ajv2020Ctor({
     allErrors: true,
     strict: false,
-    validateFormats: false
+    validateFormats: true
+  });
+
+  ajv.addFormat("date-time", {
+    validate: (value: string) => {
+      if (typeof value !== "string") {
+        return false;
+      }
+
+      const dateTimePattern =
+        /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
+      if (!dateTimePattern.test(value)) {
+        return false;
+      }
+
+      return !Number.isNaN(Date.parse(value));
+    }
+  });
+
+  ajv.addFormat("uri", {
+    validate: (value: string) => {
+      if (typeof value !== "string") {
+        return false;
+      }
+
+      try {
+        const parsed = new URL(value);
+        return parsed.protocol.length > 0 && parsed.host.length > 0;
+      } catch {
+        return false;
+      }
+    }
   });
 
   const schema = await loadSchema(name);
@@ -74,6 +106,29 @@ describe("agent-card schema", () => {
 
     expect(result.valid).toBe(false);
   });
+
+  it("rejects a card with an invalid URL", async () => {
+    const result = await validateSchema("agent-card.schema.json", {
+      protocolVersion: "0.1.0",
+      name: "broken-provider",
+      url: "not-a-uri",
+      capabilities: {
+        predictions: [
+          {
+            id: "weather.precipitation.daily",
+            domain: "weather.precipitation",
+            title: "Daily precipitation probability",
+            output: {
+              type: "binary-probability"
+            },
+            horizons: ["24h"]
+          }
+        ]
+      }
+    });
+
+    expect(result.valid).toBe(false);
+  });
 });
 
 describe("prediction-request schema", () => {
@@ -108,6 +163,24 @@ describe("prediction-request schema", () => {
       },
       prediction: {
         domain: "weather",
+        question: "Will it rain?",
+        horizon: "24h",
+        desiredOutput: "binary-probability"
+      }
+    });
+
+    expect(result.valid).toBe(false);
+  });
+
+  it("rejects a request with an invalid timestamp", async () => {
+    const result = await validateSchema("prediction-request.schema.json", {
+      requestId: "req-123",
+      createdAt: "not-a-date",
+      consumer: {
+        id: "consumer-1"
+      },
+      prediction: {
+        domain: "weather.precipitation",
         question: "Will it rain?",
         horizon: "24h",
         desiredOutput: "binary-probability"
